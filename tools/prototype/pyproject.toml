@@ -1,0 +1,11 @@
+[project]
+name = "prototype"
+version = "0.1.0"
+description = "BrowserMoji 文字選択方式の試作・実験（EXP-2 / EXP-3 前段）"
+requires-python = ">=3.12"
+dependencies = [
+    "numpy",
+    "Pillow",
+    "opencv-python-headless",
+    "fonttools",
+]
