@@ -1,0 +1,29 @@
+/**
+ * UI 文言のキー一覧（N-9）。
+ * 文言をコンポーネントに直書きしない。言語を追加するときは
+ * 同じキーの辞書を 1 つ足すだけで済むようにする。
+ */
+export const messageKeys = [
+  'appName',
+  'appDescription',
+  'privacyNotice',
+  'startButton',
+  'startingCamera',
+  'errorTitle',
+  'errorPermissionDenied',
+  'errorCameraNotFound',
+  'errorCameraBusy',
+  'errorUnsupported',
+  'errorUnknown',
+  'settingsToggle',
+  'settingColumns',
+  'settingContrast',
+  'settingEdgeThreshold',
+  'settingEdgePriority',
+  'settingInvert',
+  'settingShowFps',
+  'fpsLabel',
+] as const;
+
+export type MessageKey = (typeof messageKeys)[number];
+export type MessageDict = Record<MessageKey, string>;

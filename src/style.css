@@ -1,0 +1,194 @@
+/* UI はシステムフォントのみを使用する（N-1: 外部フォントを読み込まない） */
+:root {
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: #ffffff;
+  color: #111111;
+  font-family:
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    'Hiragino Sans',
+    'Hiragino Kaku Gothic ProN',
+    'Noto Sans JP',
+    'Yu Gothic',
+    Meiryo,
+    sans-serif;
+}
+
+#app {
+  height: 100%;
+}
+
+/* 変換結果の表示面（T-6: 既定は白背景＋黒文字。invert で renderer が反転する） */
+canvas.ascii-canvas {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* 映像ソースの video は表示しない（デコードは止まらないように実体を残す） */
+video.hidden-video {
+  position: fixed;
+  left: 0;
+  bottom: 0;
+  width: 2px;
+  height: 2px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* 開始画面（§7.1） */
+.start-screen {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 16px;
+  padding: 24px;
+  text-align: center;
+  background: #ffffff;
+}
+
+.start-title {
+  margin: 0;
+  font-size: 28px;
+}
+
+.start-description {
+  margin: 0;
+  max-width: 34em;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.start-privacy {
+  margin: 0;
+  padding: 10px 16px;
+  border: 1px solid #bbbbbb;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.start-button {
+  font-size: 18px;
+  padding: 12px 48px;
+  border-radius: 999px;
+  border: 1px solid #111111;
+  background: #111111;
+  color: #ffffff;
+  cursor: pointer;
+}
+
+.start-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.start-starting {
+  margin: 0;
+  font-size: 13px;
+  color: #555555;
+}
+
+.start-error {
+  max-width: 34em;
+  padding: 12px 16px;
+  border: 1px solid #cc0000;
+  border-radius: 8px;
+  color: #b00000;
+  font-size: 13px;
+  text-align: left;
+}
+
+.start-error-title {
+  margin: 0 0 4px;
+  font-weight: 700;
+}
+
+.start-error p {
+  margin: 0;
+}
+
+/* 設定パネル（§7.2） */
+.settings-toggle {
+  position: fixed;
+  top: 10px;
+  right: 10px;
+  z-index: 20;
+  padding: 8px 14px;
+  border: 1px solid #777777;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #111111;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.settings-panel {
+  position: fixed;
+  top: 46px;
+  right: 10px;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(320px, calc(100vw - 20px));
+  padding: 12px;
+  border: 1px solid #999999;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.95);
+  font-size: 13px;
+}
+
+.settings-panel[hidden] {
+  display: none;
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-row label {
+  flex: 0 0 7.5em;
+}
+
+.settings-row input[type='range'] {
+  flex: 1;
+  min-width: 0;
+}
+
+.settings-value {
+  flex: 0 0 3.5em;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* fps 表示（P-3） */
+.fps-indicator {
+  position: fixed;
+  left: 10px;
+  top: 10px;
+  z-index: 20;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.8);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}

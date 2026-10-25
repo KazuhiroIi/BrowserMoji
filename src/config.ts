@@ -1,0 +1,31 @@
+/**
+ * AppConfig — 調整可能な値を 1 か所に集約する（architecture.md 設計原則 2、D-003）。
+ * UI・描画ループ・将来の保存・実験が同じ設定を読む。
+ */
+export type AppConfig = {
+  /** 列数。行数は画面のアスペクト比から自動計算する */
+  columns: number;
+  /** 輝度の階調の強さ（1 = 無調整） */
+  contrast: number;
+  /** エッジとして扱う勾配のしきい値（0..1） */
+  edgeThreshold: number;
+  /** エッジ文字への置き換えのしやすさ（0..1。大きいほど置きやすい） */
+  edgePriority: number;
+  /** 白黒反転（既定: 白背景＋黒文字、T-6） */
+  invert: boolean;
+  /** 使用する文字セット（F-13 で切り替え UI を追加する予定） */
+  charset: string;
+  /** デバッグ用 fps 表示（P-3） */
+  showFps: boolean;
+};
+
+// 既定値はすべて暫定値。実験（EXP-1 〜 EXP-4、architecture.md §10）で決める。
+export const defaultConfig: AppConfig = {
+  columns: 48,
+  contrast: 1.0,
+  edgeThreshold: 0.2,
+  edgePriority: 0.5,
+  invert: false,
+  charset: 'default',
+  showFps: false,
+};
