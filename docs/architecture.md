@@ -100,7 +100,7 @@ interface Renderer {
 ## 9. リポジトリ構成案
 
 - ビルド: Vite + TypeScript、UI フレームワークなし 🔶
-- Python ツール: 仮想環境で依存を固定する（`tools/` 配下に README と依存定義を置く）
+- Python ツール: 仮想環境で依存を固定する（`tools/prototype/` 配下に README と依存定義を置く）。試作・実験コードは `experiments/` から `tools/prototype/` へ統合する（D-006）
 
 ```
 /

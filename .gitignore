@@ -1,0 +1,18 @@
+# プロジェクト固有の private 領域（公開しないメモなど）
+project-private/
+
+# Node / Vite
+node_modules/
+dist/
+*.local
+npm-debug.log*
+
+# Python（tools/ 配下の試作で使用）
+__pycache__/
+*.py[cod]
+.venv/
+tools/prototype/out/
+
+# OS / エディタ
+.DS_Store
+Thumbs.db
