@@ -5,7 +5,9 @@ import { DummyAtlasProvider } from '../pipeline/atlas';
 import { CpuFeatureExtractor } from '../pipeline/featureExtractor';
 import { computeGrid } from '../pipeline/grid';
 import { sampleFrame } from '../pipeline/preprocess';
+import type { RendererKind } from '../config';
 import { Canvas2DRenderer } from '../pipeline/renderer';
+import { WebGL2Renderer, isWebGL2Available } from '../pipeline/rendererWebGL2';
 import { DensityEdgeGlyphSelector } from '../pipeline/glyphSelector';
 import { type MessageKey } from '../i18n';
 import { createFpsIndicator, FpsStats, type FpsIndicator, type StageTimings } from './fps';
@@ -21,6 +23,8 @@ export class App {
   private video: HTMLVideoElement | null = null;
   private canvas: HTMLCanvasElement | null = null;
   private workCanvas: HTMLCanvasElement | null = null;
+  private canvas2dRenderer: Canvas2DRenderer | null = null;
+  private webglRenderer: WebGL2Renderer | null = null;
   private fps: FpsIndicator | null = null;
   private stopLoop: (() => void) | null = null;
   private lastFrameTime = 0;
@@ -29,6 +33,10 @@ export class App {
   private readonly atlasProvider = new DummyAtlasProvider();
   private readonly extractor = new CpuFeatureExtractor();
   private readonly selector: DensityEdgeGlyphSelector;
+  /** 現在使っている描画方式（cfg.renderer の選択・フォールバックの結果） */
+  private activeRendererKind: RendererKind = 'canvas2d';
+  /** WebGL2 が使えない / context lost になった後の再試行を防ぐフラグ */
+  private webgl2Broken = false;
 
   constructor(
     private root: HTMLElement,
@@ -77,20 +85,62 @@ export class App {
     this.workCanvas = document.createElement('canvas');
 
     // 設定パネル（F-6）と fps 表示（P-3）
-    createSettingsPanel(this.root, this.cfg);
+    createSettingsPanel(this.root, this.cfg, isWebGL2Available());
     this.fps = createFpsIndicator(this.root);
 
-    const renderer = new Canvas2DRenderer(canvas, this.atlasProvider);
     this.stopLoop = startFrameLoop(video, (now, metadata) => {
-      this.tick(now, metadata, renderer);
+      this.tick(now, metadata);
     });
   }
 
-  private tick(
-    now: number,
-    metadata: VideoFrameCallbackMetadata | null,
-    renderer: Canvas2DRenderer,
-  ): void {
+  /**
+   * cfg.renderer の選択に合わせて描画方式を用意する（切替は次フレームから反映）。
+   * 1 つの canvas には 1 種類のコンテキストしか取れないため、方式を変えるときは
+   * canvas 要素を作り直して差し替える。WebGL2 が使えない / context lost の場合は
+   * Canvas 2D にフォールバックし、オーバーレイの方式名が実態を反映する。
+   */
+  private ensureRenderer(): Canvas2DRenderer | WebGL2Renderer {
+    if (this.cfg.renderer !== this.activeRendererKind) {
+      const useWebGL2 = this.cfg.renderer === 'webgl2' && !this.webgl2Broken;
+      const canvas = useWebGL2 ? this.replaceCanvas() : this.canvas ?? this.replaceCanvas();
+      if (useWebGL2) {
+        try {
+          this.webglRenderer = new WebGL2Renderer(canvas, this.atlasProvider);
+        } catch {
+          // 非対応環境: Canvas 2D にフォールバックし、選択も戻す（E-2）
+          this.webgl2Broken = true;
+          this.cfg.renderer = 'canvas2d';
+        }
+      }
+      if (this.cfg.renderer === 'canvas2d') {
+        // 2d コンテキストは同一 canvas から取得し直せる（失敗時の再利用もここで行う）
+        this.canvas2dRenderer = new Canvas2DRenderer(canvas, this.atlasProvider);
+      }
+      this.activeRendererKind = this.cfg.renderer;
+    }
+
+    // 実行中の context lost を検知したら Canvas 2D にフォールバックする
+    const webgl = this.webglRenderer;
+    if (webgl?.isContextLost()) {
+      const canvas = this.replaceCanvas();
+      this.canvas2dRenderer = new Canvas2DRenderer(canvas, this.atlasProvider);
+      this.webglRenderer = null;
+      this.webgl2Broken = true;
+      this.activeRendererKind = 'canvas2d';
+      return this.canvas2dRenderer;
+    }
+    return (this.canvas2dRenderer ?? this.webglRenderer)!;
+  }
+
+  /** 新しい canvas 要素を既存のものと入れ替える（コンテキスト種別の変更時） */
+  private replaceCanvas(): HTMLCanvasElement {
+    const canvas = el('canvas', 'ascii-canvas');
+    this.canvas?.replaceWith(canvas);
+    this.canvas = canvas;
+    return canvas;
+  }
+
+  private tick(now: number, metadata: VideoFrameCallbackMetadata | null): void {
     const video = this.video;
     const canvas = this.canvas;
     const work = this.workCanvas;
@@ -108,6 +158,9 @@ export class App {
 
     const grid = computeGrid(canvas.width, canvas.height, this.cfg.columns);
     const sampled = sampleFrame(video, grid, work);
+
+    // 描画方式: cfg.renderer の選択に追従する（切替・フォールバックは次フレームから反映）
+    const renderer = this.ensureRenderer();
 
     // ステージ別の処理時間を計測する（P-3）。前処理 blit / read は sampleFrame が測る
     let stages: StageTimings | null = null;
@@ -134,8 +187,7 @@ export class App {
 
     if (this.fps) {
       this.fps.setVisible(this.cfg.showFps);
-      this.fps.update(this.fpsStats.snapshot(), this.cfg.columns, renderer.renderMethod);
-    }
+      this.fps.update(this.fpsStats.snapshot(), this.cfg.columns, renderer.renderMethod);    }
   }
 }
 

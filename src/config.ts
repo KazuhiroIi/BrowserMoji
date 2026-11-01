@@ -2,7 +2,12 @@
  * AppConfig — 調整可能な値を 1 か所に集約する（architecture.md 設計原則 2、D-003）。
  * UI・描画ループ・将来の保存・実験が同じ設定を読む。
  */
+/** 描画方式（architecture.md §5。EXP-1 で比較する） */
+export type RendererKind = 'canvas2d' | 'webgl2';
+
 export type AppConfig = {
+  /** 描画方式（Canvas 2D と WebGL2。切替 UI で変更し、次フレームから反映する） */
+  renderer: RendererKind;
   /** 列数。行数は画面のアスペクト比から自動計算する */
   columns: number;
   /** 輝度の階調の強さ（1 = 無調整） */
@@ -21,6 +26,7 @@ export type AppConfig = {
 
 // 既定値はすべて暫定値。実験（EXP-1 〜 EXP-4、architecture.md §10）で決める。
 export const defaultConfig: AppConfig = {
+  renderer: 'canvas2d',
   columns: 48,
   contrast: 1.0,
   edgeThreshold: 0.2,
