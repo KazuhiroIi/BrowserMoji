@@ -23,6 +23,17 @@ export const messageKeys = [
   'settingInvert',
   'settingShowFps',
   'fpsLabel',
+  'msLabel',
+  'fpsAvg',
+  'fpsMin',
+  'fpsCam',
+  'fpsPre',
+  'fpsRead',
+  'fpsFeat',
+  'fpsSel',
+  'fpsDraw',
+  'fpsCols',
+  'fpsNotAvailable',
 ] as const;
 
 export type MessageKey = (typeof messageKeys)[number];

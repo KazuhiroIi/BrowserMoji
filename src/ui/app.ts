@@ -7,9 +7,8 @@ import { computeGrid } from '../pipeline/grid';
 import { sampleFrame } from '../pipeline/preprocess';
 import { Canvas2DRenderer } from '../pipeline/renderer';
 import { DensityEdgeGlyphSelector } from '../pipeline/glyphSelector';
-import type { FrameSource } from '../pipeline/types';
 import { type MessageKey } from '../i18n';
-import { createFpsIndicator, type FpsIndicator } from './fps';
+import { createFpsIndicator, FpsStats, type FpsIndicator, type StageTimings } from './fps';
 import { createSettingsPanel } from './settingsPanel';
 import { createStartScreen, type StartScreen } from './startScreen';
 import { el } from './dom';
@@ -25,7 +24,7 @@ export class App {
   private fps: FpsIndicator | null = null;
   private stopLoop: (() => void) | null = null;
   private lastFrameTime = 0;
-  private fpsValue = 0;
+  private readonly fpsStats = new FpsStats();
 
   private readonly atlasProvider = new DummyAtlasProvider();
   private readonly extractor = new CpuFeatureExtractor();
@@ -82,23 +81,23 @@ export class App {
     this.fps = createFpsIndicator(this.root);
 
     const renderer = new Canvas2DRenderer(canvas, this.atlasProvider);
-    this.stopLoop = startFrameLoop(video, (now) => {
-      this.tick(now, renderer);
+    this.stopLoop = startFrameLoop(video, (now, metadata) => {
+      this.tick(now, metadata, renderer);
     });
   }
 
-  private tick(now: number, renderer: Canvas2DRenderer): void {
+  private tick(
+    now: number,
+    metadata: VideoFrameCallbackMetadata | null,
+    renderer: Canvas2DRenderer,
+  ): void {
     const video = this.video;
     const canvas = this.canvas;
     const work = this.workCanvas;
     if (!video || !canvas || !work) return;
 
-    // fps 計測（P-3）
     const dt = now - this.lastFrameTime;
     this.lastFrameTime = now;
-    if (dt > 0 && dt < 1000) {
-      this.fpsValue = this.fpsValue === 0 ? 1000 / dt : this.fpsValue * 0.9 + (1000 / dt) * 0.1;
-    }
 
     // canvas の実サイズを表示サイズと dpr に追従させる（画面回転時も毎フレーム再計算。E-4）
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -108,16 +107,34 @@ export class App {
     if (canvas.height !== targetH) canvas.height = targetH;
 
     const grid = computeGrid(canvas.width, canvas.height, this.cfg.columns);
-    const frame: FrameSource | null = sampleFrame(video, grid, work);
-    if (frame) {
-      const features = this.extractor.extract(frame, grid, this.cfg);
+    const sampled = sampleFrame(video, grid, work);
+
+    // ステージ別の処理時間を計測する（P-3）。前処理 blit / read は sampleFrame が測る
+    let stages: StageTimings | null = null;
+    if (sampled.frame) {
+      stages = { pre: sampled.timings.pre, read: sampled.timings.read, feat: 0, sel: 0, draw: 0 };
+      const extractStart = performance.now();
+      const features = this.extractor.extract(sampled.frame, grid, this.cfg);
+      const selectStart = performance.now();
       const glyphIds = this.selector.select(features, this.cfg);
+      const renderStart = performance.now();
       renderer.render(glyphIds, grid, this.cfg);
+      stages.feat = selectStart - extractStart;
+      stages.sel = renderStart - selectStart;
+      stages.draw = performance.now() - renderStart;
+    }
+
+    // fps 統計（P-3）: EMA ではなく直近 5 秒のローリング窓で平均・最小を取る。
+    // タブの非表示などで長く止まっていたフレームは瞬間値が極端になるため窓を立て直す
+    if (dt > 0 && dt < 1000) {
+      this.fpsStats.add(now, 1000 / dt, metadata ? metadata.presentedFrames : null, stages);
+    } else {
+      this.fpsStats.clear();
     }
 
     if (this.fps) {
       this.fps.setVisible(this.cfg.showFps);
-      this.fps.update(this.fpsValue);
+      this.fps.update(this.fpsStats.snapshot(), this.cfg.columns, renderer.renderMethod);
     }
   }
 }

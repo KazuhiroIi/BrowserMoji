@@ -8,6 +8,9 @@ import type { Renderer, GridSpec } from './types';
  * 配色既定は白背景＋黒文字、invert で反転（T-6）。
  */
 export class Canvas2DRenderer implements Renderer {
+  /** 描画方式の名前（EXP-1 の計測表示用。Renderer インターフェースのシグネチャは変えない） */
+  readonly renderMethod = 'canvas2d';
+
   constructor(
     private canvas: HTMLCanvasElement,
     private atlasProvider: AtlasProvider,

@@ -26,4 +26,16 @@ export const ja: MessageDict = {
   settingInvert: '白黒反転',
   settingShowFps: 'fps 表示',
   fpsLabel: 'fps',
+  msLabel: 'ms',
+  // オーバーレイの行ラベル（EXP-1 の計測用。英語略称のまま、文言は辞書で持つ）
+  fpsAvg: 'avg',
+  fpsMin: 'min',
+  fpsCam: 'cam',
+  fpsPre: 'pre',
+  fpsRead: 'read',
+  fpsFeat: 'feat',
+  fpsSel: 'sel',
+  fpsDraw: 'draw',
+  fpsCols: 'cols',
+  fpsNotAvailable: '—',
 };

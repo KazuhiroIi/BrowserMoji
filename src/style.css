@@ -180,15 +180,17 @@ video.hidden-video {
   font-variant-numeric: tabular-nums;
 }
 
-/* fps 表示（P-3） */
+/* fps・統計のオーバーレイ（P-3。複数行のテキストを \n 区切りで表示する） */
 .fps-indicator {
   position: fixed;
   left: 10px;
   top: 10px;
   z-index: 20;
-  padding: 2px 8px;
+  padding: 4px 8px;
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.8);
   font-size: 12px;
+  line-height: 1.5;
+  white-space: pre;
   font-variant-numeric: tabular-nums;
 }
