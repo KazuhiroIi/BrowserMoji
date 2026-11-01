@@ -15,6 +15,8 @@ export const messageKeys = [
   'errorCameraBusy',
   'errorUnsupported',
   'errorUnknown',
+  'errorRenderLoopTitle',
+  'errorRenderLoopBody',
   'settingsToggle',
   'settingRenderer',
   'settingRendererCanvas2d',

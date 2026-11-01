@@ -58,6 +58,10 @@ export class WebGL2Renderer implements Renderer {
       this.uniform[name] = gl.getUniformLocation(this.program, name);
     }
     gl.useProgram(this.program);
+    // サンプラのユニットを固定する。既定では両サンプラともユニット 0 を見るため、
+    // uAtlas が整数テクスチャ（uGlyphs）と衝突して draw が INVALID_OPERATION になる
+    gl.uniform1i(gl.getUniformLocation(this.program, 'uGlyphs'), 0);
+    gl.uniform1i(gl.getUniformLocation(this.program, 'uAtlas'), 1);
   }
 
   render(glyphIds: Uint16Array, grid: GridSpec, cfg: AppConfig, _color?: Uint8Array): void {
@@ -100,6 +104,8 @@ layout(location = 0) in vec2 aPos;
 void main() { gl_Position = vec4(aPos, 0.0, 1.0); }`;
     const fs = `#version 300 es
 precision highp float;
+// 整数サンプラには既定の精度がないため明示する（ドライバによってはコンパイルエラーになる）
+precision highp usampler2D;
 uniform usampler2D uGlyphs;
 uniform sampler2D uAtlas;
 // (cols, rows, cellWidth, cellHeight)
@@ -162,6 +168,10 @@ void main() {
     }
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.glyphTexture);
+    // 転送元は 2 バイト/ピクセル（Uint16Array）。行の先頭は UNPACK_ALIGNMENT の倍数
+    // オフセットでなければならず、既定の 4 では奇数列（例: 33 列）で行がずれて
+    // GL エラーになる。任意の列数で転送できるよう 2 バイト境界に緩め、転送後に戻す
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 2);
     if (this.glyphTexWidth !== cols || this.glyphTexHeight !== rows) {
       // 画面回転などで格子が変わったときは領域を確保し直す
       this.glyphTexWidth = cols;
@@ -190,6 +200,7 @@ void main() {
         glyphIds,
       );
     }
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
   }
 
   /** アトラス canvas をテクスチャとしてアップロードする（charset・invert 変更時に再アップロード） */

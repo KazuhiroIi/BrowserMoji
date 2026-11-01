@@ -18,6 +18,10 @@ export const ja: MessageDict = {
   errorUnsupported:
     'このブラウザ・環境ではカメラを利用できません。HTTPS で開いた最新のブラウザ（iOS Safari・Android Chrome など）をお使いください。',
   errorUnknown: '不明なエラーが発生しました。ページを再読み込みしてください。',
+  // 描画ループ（tick）内で回復できない例外が起きたときの表示（F-9）
+  errorRenderLoopTitle: '描画中にエラーが発生しました',
+  errorRenderLoopBody:
+    '表示が停止しました。ページを再読み込みしてください。設定の「描画方式」を「Canvas 2D」に変更してから再読み込みすると解消することがあります。',
   settingsToggle: '設定',
   settingRenderer: '描画方式',
   settingRendererCanvas2d: 'Canvas 2D',
