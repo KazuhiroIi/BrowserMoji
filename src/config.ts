@@ -27,5 +27,6 @@ export const defaultConfig: AppConfig = {
   edgePriority: 0.5,
   invert: false,
   charset: 'default',
-  showFps: false,
+  // EXP-1 で実機 fps を計測するため既定 ON。設定パネルで OFF にできる
+  showFps: true,
 };
