@@ -15,10 +15,11 @@ architecture.md の設計原則 2 より、調整可能な値はすべて 1 つ�
 
 ## 決定
 
-AppConfig の初期項目は次の 7 つとする:
+AppConfig の初期項目は次の 8 つとする（`renderer` は描画方式の比較・切替のために追加。既定値は D-008 で確定）:
 
 | フィールド | 内容 |
 |---|---|
+| `renderer` | 描画方式（`'canvas2d'` \| `'webgl2'`。既定 `'webgl2'`。D-008） |
 | `columns` | 列数（行数は画面比から自動計算） |
 | `contrast` | 輝度の階調の強さ |
 | `edgeThreshold` | エッジとして扱う勾配のしきい値 |

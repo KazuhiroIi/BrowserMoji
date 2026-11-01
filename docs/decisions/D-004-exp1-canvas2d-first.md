@@ -1,7 +1,8 @@
 # D-004: EXP-1（描画方式）の進め方 — Canvas 2D 先行、WebGL2 を後から比較
 
-- 状態: 🔶（仮決め）
+- 状態: 🔒（確定）
 - 関連: architecture.md §5, EXP-1
+- **結果**: 描画方式は WebGL2 に決定した（`renderer` の既定も `'webgl2'`）。結果は D-008 と docs/experiments/exp-1.md を参照。本文件の背景・決定は歴史的経緯として保持する
 
 ## 背景
 

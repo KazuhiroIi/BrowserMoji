@@ -2,7 +2,7 @@
  * AppConfig — 調整可能な値を 1 か所に集約する（architecture.md 設計原則 2、D-003）。
  * UI・描画ループ・将来の保存・実験が同じ設定を読む。
  */
-/** 描画方式（architecture.md §5。EXP-1 で比較する） */
+/** 描画方式（architecture.md §5、D-008） */
 export type RendererKind = 'canvas2d' | 'webgl2';
 
 export type AppConfig = {
@@ -24,9 +24,11 @@ export type AppConfig = {
   showFps: boolean;
 };
 
-// 既定値はすべて暫定値。実験（EXP-1 〜 EXP-4、architecture.md §10）で決める。
+// 既定値は原則暫定値。実験（EXP-1 〜 EXP-4、architecture.md §10）で決める。
+// renderer の既定は EXP-1 の結果により 'webgl2' に確定（D-008）。WebGL2 の生成失敗・
+// context lost 時は canvas2d にフォールバックする（app.ts の ensureRenderer）。
 export const defaultConfig: AppConfig = {
-  renderer: 'canvas2d',
+  renderer: 'webgl2',
   columns: 48,
   contrast: 1.0,
   edgeThreshold: 0.2,
