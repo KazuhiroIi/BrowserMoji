@@ -21,6 +21,15 @@ export type GlyphInfo = {
 /** 前景の色ごとに用意したアトラス画像 */
 export type FgColor = 'black' | 'white';
 
+/** 方式 A のエッジ置換で使う「まっすぐな線」のグリフ（D-009 / T-5） */
+export type StraightLineGlyph = {
+  id: number;
+  /** 線の向き（度。0 = ― 水平、45 = ＼、90 = ｜ 垂直、135 = ／。画面座標系・y 下向き） */
+  angleDeg: number;
+  /** 濃度（平均インク率 0..1）。エッジの強さで太さ（濃度）を選ぶのに使う */
+  ink: number;
+};
+
 export type GlyphAtlas = {
   charset: string;
   cellWidth: number;
@@ -29,13 +38,8 @@ export type GlyphAtlas = {
   glyphs: GlyphInfo[];
   /** 濃度用のグリフ ID（ink 昇順 = 薄い順） */
   densityIds: number[];
-  /** 線記号のグリフ ID（エッジ用）。見つからない場合は -1 */
-  lineIds: {
-    horizontal: number; // ―
-    vertical: number; // ｜
-    slash: number; // ／
-    backslash: number; // ＼
-  };
+  /** エッジ置換で使う直線グリフ（向き・濃度付き。角・T 字は向きが一意でないため含めない） */
+  straightLines: StraightLineGlyph[];
   /** 転写元のアトラス画像（前景色ごと） */
   canvasFor(fg: FgColor): HTMLCanvasElement;
 };
@@ -45,22 +49,72 @@ export interface AtlasProvider {
 }
 
 /**
- * 【ダミー実装】コード内にハードコードした全角文字の小さなセットを、
+ * 【ダミー実装】コード内にハードコードした全角文字のセットを、
  * 起動時に（DOM 外の）canvas へ fillText で描いてアトラス代わりにする。
  *
- * - 本物のグリフアトラス資産は Python トラックから後日届く（public/assets 生成予定）
- * - このモジュール（AtlasProvider の実装）だけを差し替えれば、
- *   FeatureExtractor / GlyphSelector / Renderer は無変更で本物のアトラスに移行できる
+ * - 文字セットは EXP-3（D-010 / T-4）で確定した採用セット
+ *   （プリセット all = density 27 文字 + line 35 文字、計 62 文字）
+ * - 本物のグリフアトラス資産は Python トラックが生成する（tools/prototype/atlas.py、
+ *   Noto Sans JP Regular。public/assets 生成予定）。このモジュール（AtlasProvider の
+ *   実装）だけを差し替えれば、FeatureExtractor / GlyphSelector / Renderer は無変更で移行できる
  * - 濃度（インク率）はここで各文字を描いて測っている。これも将来 JSON から供給する値に置き換わる
+ *   （Noto Sans JP とシステムフォントの差で測定値は多少ずれる。実物資産に移行すれば解消）
  */
-const DUMMY_CHARSETS: Record<string, { density: string[]; lines: string[] }> = {
-  // 濃度用: 薄い順に並べたつもの候補（実際の並び順は描いて測ったインク率で決める）
-  // 線用: エッジの向きに合わせて選ぶ線記号（T-5 の `／＼｜―` 系）
-  default: {
-    density: ['　', '・', '○', '＋', 'の', '三', '日', '◎', '■'],
-    lines: ['―', '／', '｜', '＼'],
-  },
-};
+const DENSITY_CHARS = [
+  '　', // 全角スペース（背景 = T-3）
+  '・', // 中黒
+  '：', // 全角コロン
+  '∴', // ゆえに
+  '◇', // 白ダイヤ
+  '○', // 白丸
+  '□', // 白四角
+  '△', // 白三角
+  '☆', // 白星
+  '◎', // 二重丸
+  '※', // こめじるし
+  '▒', // 中網かけ（EXP-3 追加）
+  '▣', // 白四角＋中黒四角（EXP-3 追加）
+  '★', // 黒星
+  '▃', // 下棒 3/8（EXP-3 追加）
+  '◐', // 左半円（EXP-3 追加）
+  '▲', // 黒三角
+  '▄', // 下棒 1/2（EXP-3 追加）
+  '◆', // 黒ダイヤ
+  '▀', // 上棒 1/2（EXP-3 追加）
+  '▅', // 下棒 5/8（EXP-3 追加）
+  '●', // 黒丸
+  '■', // 黒四角
+  '▆', // 下棒 3/4（EXP-3 追加）
+  '▛', // 上 3/4 ブロック（EXP-3 追加）
+  '▇', // 下棒 7/8（EXP-3 追加）
+  '█', // 全ブロック（EXP-3 追加。このフォントで最も濃い記号）
+];
+
+const LINE_CHARS = [
+  '―', // 水平バー
+  '─', '━', // 細線 / 太線（横）
+  '│', '┃', // 細線 / 太線（縦）
+  '┌', '┐', '└', '┘', // 細い角
+  '├', '┤', '┬', '┴', '┼', // 細いT字・十字
+  '┏', '┓', '┗', '┛', // 太い角
+  '┣', '┫', '┳', '┻', '╋', // 太いT字・十字
+  '═', '║', // 二重線
+  '╭', '╮', '╯', '╰', // 丸角
+  '╱', '╲', '╳', // 斜線
+  '／', '＼', // 全角斜線
+  '｜', // 全角縦棒
+];
+
+/**
+ * 方式 A のエッジ置換で使う「まっすぐな線」と向き（度）。
+ * 角・T 字・十字は向きが一意でないため候補から外す（D-009 / T-5 の調整に相当）。
+ */
+const STRAIGHT_LINES: ReadonlyArray<readonly [string, number]> = [
+  ['―', 0], ['─', 0], ['━', 0], ['═', 0], // 水平
+  ['│', 90], ['┃', 90], ['║', 90], ['｜', 90], // 垂直
+  ['╲', 45], ['＼', 45], // バックスラッシュ
+  ['╱', 135], ['／', 135], // スラッシュ
+];
 
 const ATLAS_CELL = 96; // アトラス 1 セルのピクセル数（転写時に拡大縮小される）
 const FONT_FAMILY = `"Noto Sans JP", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, sans-serif`;
@@ -114,11 +168,9 @@ export class DummyAtlasProvider implements AtlasProvider {
 }
 
 export function buildDummyAtlas(charset: string): GlyphAtlas {
-  const def = DUMMY_CHARSETS[charset] ?? DUMMY_CHARSETS['default'];
-
   // グリフの一覧を作る（重複はまとめる）
   const chars: string[] = [];
-  for (const c of [...def.density, ...def.lines]) {
+  for (const c of [...DENSITY_CHARS, ...LINE_CHARS]) {
     if (!chars.includes(c)) chars.push(c);
   }
   const idOf = new Map<string, number>();
@@ -128,17 +180,17 @@ export function buildDummyAtlas(charset: string): GlyphAtlas {
   });
 
   // 濃度用は測ったインク率の昇順（薄い順）に並べ直す
-  const densityIds = def.density
-    .map((c) => idOf.get(c) ?? -1)
+  const densityIds = DENSITY_CHARS.map((c) => idOf.get(c) ?? -1)
     .filter((id) => id >= 0)
     .sort((a, b) => glyphs[a].ink - glyphs[b].ink);
 
-  const lineIds = {
-    horizontal: idOf.get('―') ?? -1,
-    vertical: idOf.get('｜') ?? -1,
-    slash: idOf.get('／') ?? -1,
-    backslash: idOf.get('＼') ?? -1,
-  };
+  // エッジ置換用の直線グリフ（向きは STRAIGHT_LINES の定義、濃度は測定値）
+  const straightLines: StraightLineGlyph[] = STRAIGHT_LINES
+    .map(([char, angleDeg]) => {
+      const id = idOf.get(char);
+      return id === undefined ? null : { id, angleDeg, ink: glyphs[id].ink };
+    })
+    .filter((g): g is StraightLineGlyph => g !== null);
 
   // 前景色ごとのアトラス画像を用意する（既定: 白背景＋黒文字、invert で反転。T-6）
   const canvases = new Map<FgColor, HTMLCanvasElement>();
@@ -162,7 +214,7 @@ export function buildDummyAtlas(charset: string): GlyphAtlas {
     cellHeight: ATLAS_CELL,
     glyphs,
     densityIds,
-    lineIds,
+    straightLines,
     canvasFor,
   };
 }

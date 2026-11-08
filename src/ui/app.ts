@@ -174,7 +174,7 @@ export class App {
       if (canvas.width !== targetW) canvas.width = targetW;
       if (canvas.height !== targetH) canvas.height = targetH;
 
-      const grid = computeGrid(canvas.width, canvas.height, this.cfg.columns);
+      const grid = computeGrid(canvas.width, canvas.height, this.cfg.columns, this.cfg.featurePx);
       const sampled = sampleFrame(video, grid, work);
 
       // 描画方式: cfg.renderer の選択に追従する（切替・フォールバックは次フレームから反映）
