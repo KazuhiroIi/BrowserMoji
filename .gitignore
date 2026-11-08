@@ -19,3 +19,6 @@ Thumbs.db
 
 # フォント実体は配布しない（生成ツールがローカルで使用。ライセンスは tools/prototype/README.md と docs/experiments/exp-3.md に記録）
 tools/prototype/fonts/
+
+# サンプルデータ
+data/
