@@ -15,7 +15,7 @@ PC 上の Python で比較するための基準実装。ここで作った出力
 ```
 tools/prototype/
   pyproject.toml      # 依存: numpy / Pillow / opencv-python-headless / fonttools
-  charset.py          # 文字セット候補の定義（4 群 + 実験用プリセット）
+  charset.py          # 文字セットの定義（採用 2 群＋方式 B 再評価用の 3 群＋プリセット）
   glyphfeat.py        # 特徴量計算（アトラス生成と実行時で共有する基準実装）
   atlas.py            # グリフアトラス PNG + 特徴量テーブル JSON の生成
   synth.py            # 合成入力画像の生成（実機写真が用意されるまでの代用）
@@ -24,6 +24,7 @@ tools/prototype/
   convert.py          # 静止画 → ASCII 変換（A/B の比較 PNG を出力）
   bench.py            # 1 フレーム処理時間の計測（EXP-2 の数値）
   sheet.py            # 群ごとの文字シート画像（EXP-3 の資料）
+  scan.py             # 濃度フィラー候補の計測（EXP-3 の補助。候補追加の比較に使う）
   fonts/              # Noto Sans JP（コミットしない・後述）
   out/                # 生成物（すべて再生成可能）
     assets/           #   atlas.png / features.json
@@ -45,6 +46,7 @@ uv run python convert.py --synth --cols 80     # 3. 全合成画像を A/B 変�
 uv run python convert.py --input path/to.png --cols 80   # 実機写真など任意の 1 枚
 uv run python bench.py                         # 4. 処理時間の計測
 uv run python sheet.py                         # 5. 群ごとの文字シート
+uv run python scan.py                          # （補助）濃度フィラー候補の計測
 ```
 
 主なオプション:
@@ -59,21 +61,28 @@ uv run python sheet.py                         # 5. 群ごとの文字シート
 `charsetPreset` と `--charset` の一致を確認する。文字セットを変えて実験するときは
 先に `atlas.py --charset <preset>` を再実行する。
 
-## 文字セット候補（charset.py）
+## 文字セット（charset.py・EXP-3 で決定）
 
-4 群・合計 212 文字（Noto Sans JP Regular にすべて収録されていることを確認済み）。
+採用セット（プリセット `all`）は 2 群・合計 62 文字（Noto Sans JP Regular に
+すべて収録されていることを確認済み）。決定の経緯は docs/experiments/exp-3.md と
+docs/decisions/D-010-charset-symbols.md を参照。
 
 | 群 | 文字数 | 濃度の計測値（16×16 換算） | 役割 |
 |---|---|---|---|
-| density 濃度記号 | 16 | 0.000（全角スペース）〜 0.640（■） | 方式 A の輝度 → 濃度対応。`　・：∴◇○□△☆◎※▲◆★●■` |
+| density 濃度記号 | 27 | 0.000（全角スペース）〜 0.937（█） | 方式 A の輝度 → 濃度対応。記号 16 文字＋ブロック要素など 11 文字（EXP-3 で追加: `▒▣▃◐▄▀▅▆▛▇█`） |
 | line 線記号 | 35 | 0.029 ─ 〜 0.219 ╋ | エッジの向き・太さ。`─━│┃┌…╋═║╭…╳／＼｜` |
-| hiragana かな | 71 | 0.099 〜 0.261 | 五十音＋濁点・半濁点 |
-| katakana かな | 71 | 0.084 〜 0.209 | 同上（カタカナ） |
-| kanji 漢字 | 19 | 0.075（一）〜 0.331（黒・森） | 濃度の異なる少数の漢字 |
+
+かな・漢字の 3 群（hiragana 71 / katakana 71 / kanji 19）は、方式 A では
+不使用のため採用セットから外した。プリセット `b`（全 5 群・223 文字）で
+方式 B の再評価用に温存している。
 
 実験用プリセット: `density` / `line` / `symbols`(1+2) / `hiragana` / `kana`(かな全部) /
-`all`（既定）。方式 A のエッジ置換は、向きが一意でない角・T 字を除いた
-「まっすぐな線」サブセット（`STRAIGHT_LINE_CHARS`）を使う（T-5 の調整に相当）。
+`b`(全 5 群) / `all`（= symbols、採用セット・既定）。方式 A のエッジ置換は、
+向きが一意でない角・T 字を除いた「まっすぐな線」サブセット
+（`STRAIGHT_LINE_CHARS`）を使う（T-5 の調整に相当）。
+
+濃度フィラーに文字を追加・比較するときは `scan.py` を使う
+（アトラス生成と同一の手順で計測し、features.json の値と直接比較できる）。
 
 ## 特徴量テーブル（out/assets/features.json）
 
