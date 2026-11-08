@@ -22,3 +22,8 @@ tools/prototype/fonts/
 
 # サンプルデータ
 data/
+
+# e2e テストの成果物（計測結果・Playwright の一時ファイル）
+results/
+test-results/
+playwright-report/

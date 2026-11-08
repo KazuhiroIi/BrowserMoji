@@ -11,6 +11,7 @@ import { WebGL2Renderer, isWebGL2Available } from '../pipeline/rendererWebGL2';
 import { DensityEdgeGlyphSelector } from '../pipeline/glyphSelector';
 import { type MessageKey, t } from '../i18n';
 import { createFpsIndicator, FpsStats, type FpsIndicator, type StageTimings } from './fps';
+import { setTestHook } from './testHook';
 import { createSettingsPanel } from './settingsPanel';
 import { createStartScreen, type StartScreen } from './startScreen';
 import { el } from './dom';
@@ -37,6 +38,9 @@ export class App {
   private activeRendererKind: RendererKind = 'canvas2d';
   /** WebGL2 が使えない / context lost になった後の再試行を防ぐフラグ */
   private webgl2Broken = false;
+  /** e2e テスト用の累積カウンタ（処理したフレーム数とステージ別処理時間の合計） */
+  private framesProcessed = 0;
+  private stageTotals: StageTimings = { pre: 0, read: 0, feat: 0, sel: 0, draw: 0 };
 
   constructor(
     private root: HTMLElement,
@@ -87,6 +91,15 @@ export class App {
     // 設定パネル（F-6）と fps 表示（P-3）
     createSettingsPanel(this.root, this.cfg, isWebGL2Available());
     this.fps = createFpsIndicator(this.root);
+
+    // e2e テスト用の計測フック（e2e/README.md）。テストが fps 統計と
+    // 描画方式の実態を FPS 表示の DOM パースに頼らず読めるようにする
+    setTestHook({
+      getFpsSnapshot: () => this.fpsStats.snapshot(),
+      getFrameStats: () => ({ frames: this.framesProcessed, stages: { ...this.stageTotals } }),
+      getRenderer: () => this.activeRendererKind,
+      isRunning: () => this.stopLoop !== null,
+    });
 
     this.stopLoop = startFrameLoop(video, (now, metadata) => {
       this.tick(now, metadata);
@@ -193,6 +206,14 @@ export class App {
         stages.feat = selectStart - extractStart;
         stages.sel = renderStart - selectStart;
         stages.draw = performance.now() - renderStart;
+
+        // 累積カウンタ（e2e テストの計測用。5 秒窓に依存しない計測を可能にする）
+        this.framesProcessed++;
+        this.stageTotals.pre += stages.pre;
+        this.stageTotals.read += stages.read;
+        this.stageTotals.feat += stages.feat;
+        this.stageTotals.sel += stages.sel;
+        this.stageTotals.draw += stages.draw;
       }
 
       // fps 統計（P-3）: EMA ではなく直近 5 秒のローリング窓で平均・最小を取る。

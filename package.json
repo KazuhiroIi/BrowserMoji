@@ -7,9 +7,15 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:e2e": "playwright test",
+    "test:perf": "playwright test e2e/perf.spec.ts --headed",
+    "test:media": "python tools/e2e/prepare_media.py"
   },
   "devDependencies": {
+    "@playwright/test": "^1.65.0",
+    "pixelmatch": "^8.0.0",
+    "pngjs": "^7.0.0",
     "typescript": "^7.0.2",
     "vite": "^8.3.5"
   }
