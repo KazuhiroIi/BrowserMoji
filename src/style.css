@@ -29,13 +29,16 @@ body {
   height: 100%;
 }
 
-/* 変換結果の表示面（T-6: 既定は白背景＋黒文字。invert で renderer が反転する） */
+/* 変換結果の表示面（T-6: 既定は白背景＋黒文字。invert で renderer が反転する）。
+   背景を白く塗っておく: 最初のフレームを描くまで canvas は未描画で透過だが、
+   端末によっては未描画の WebGL canvas が白でなく黒く合成されることがある（D-011） */
 canvas.ascii-canvas {
   position: fixed;
   inset: 0;
   width: 100%;
   height: 100%;
   display: block;
+  background: #ffffff;
 }
 
 /* 映像ソースの video は表示しない（デコードは止まらないように実体を残す） */

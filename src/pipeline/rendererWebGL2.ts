@@ -11,7 +11,12 @@ import type { Renderer, GridSpec } from './types';
  *
  * - グリフ ID は毎フレーム 1 回の texSubImage2D で転送する（cols×rows の 1 チャンネル）
  * - アトラスは AtlasProvider の canvas をテクスチャとしてアップロードする
- *   （charset・invert の変更時に再アップロード）
+ *   （charset・invert の変更時に再アップロード）。アトラスは**不透明**なので
+ *   シェーダは tex.rgb をそのまま出力する（D-011）
+ * - アトラスは MAX_TEXTURE_SIZE に収まるよう縮めたセル幅で構成する（D-011）。
+ *   かつては転送失敗を検知しておらず、不完全テクスチャ（サンプル値 = 不透明黒）の
+ *   まま全画面を黒く塗る端末があった。失敗は getError() で検知して broken を立て、
+ *   呼び出し側（app.ts）が Canvas 2D にフォールバックする
  * - サンプリングは半テクセル inset 付きの LINEAR で、隣接文字がにじまないようにする
  * - 生成時に WebGL2 が使えない環境では例外で通知する（切替 UI は事前判定で無効化する）
  * - context lost は検知して報告し、呼び出し側（app.ts）が Canvas 2D にフォールバックする
@@ -23,6 +28,8 @@ export class WebGL2Renderer implements Renderer {
   private gl: WebGL2RenderingContext;
   private program: WebGLProgram;
   private vao: WebGLVertexArrayObject;
+  /** テクスチャ 1 辺の上限（px）。アトラス構成の制約として AtlasProvider に渡す（D-011） */
+  private readonly maxTextureSize: number;
   private glyphTexture: WebGLTexture | null = null;
   private atlasTexture: WebGLTexture | null = null;
   /** アップロード済みのアトラス（作り直し条件とセットで持つ） */
@@ -32,6 +39,10 @@ export class WebGL2Renderer implements Renderer {
   private vpWidth = 0;
   private vpHeight = 0;
   private lost = false;
+  /** GL エラー（転送失敗など）を検知したら立てる。以後描画せず Canvas 2D へフォールバックする */
+  private broken = false;
+  /** 直近に検知した GL エラーコード（診断表示用。0 = エラー無し） */
+  private lastGlError = 0;
   private uniform: Record<string, WebGLUniformLocation | null> = {};
 
   constructor(
@@ -41,6 +52,7 @@ export class WebGL2Renderer implements Renderer {
     const gl = canvas.getContext('webgl2');
     if (!gl) throw new Error('WebGL2 is not available');
     this.gl = gl;
+    this.maxTextureSize = gl.getParameter(gl.MAX_TEXTURE_SIZE);
     gl.canvas.addEventListener('webglcontextlost', ((e: Event) => {
       e.preventDefault();
       this.lost = true;
@@ -62,14 +74,33 @@ export class WebGL2Renderer implements Renderer {
     // uAtlas が整数テクスチャ（uGlyphs）と衝突して draw が INVALID_OPERATION になる
     gl.uniform1i(gl.getUniformLocation(this.program, 'uGlyphs'), 0);
     gl.uniform1i(gl.getUniformLocation(this.program, 'uAtlas'), 1);
+    // 構築中のエラーフラグを消化しておく（最初の render() の getError を誤検知させない）
+    gl.getError();
   }
 
   render(glyphIds: Uint16Array, grid: GridSpec, cfg: AppConfig, _color?: Uint8Array): void {
     const gl = this.gl;
-    if (this.lost || gl.isContextLost()) return;
-    const atlas = this.atlasProvider.getAtlas(cfg);
+    if (this.lost || this.broken || gl.isContextLost()) return;
+    let atlas: GlyphAtlas;
+    try {
+      // テクスチャ幅上限に収まるアトラスを要求する（D-011）。極端に小さい上限で
+      // 収められない場合は例外 → broken を立てて Canvas 2D へフォールバックさせる
+      atlas = this.atlasProvider.getAtlas(cfg, this.maxTextureSize);
+    } catch {
+      this.broken = true;
+      return;
+    }
     this.ensureAtlasTexture(atlas, cfg);
     this.ensureGlyphTexture(glyphIds, grid.cols, grid.rows);
+    // 転送の成否をここで確認する。失敗したテクスチャは「不完全」になり、サンプル値が
+    // 不透明黒を返すため、描いてしまうと全画面が真っ黒になる（D-011）。黒で塗るよりは
+    // 描かずに Canvas 2D へフォールバックするほうが安全
+    const uploadError = gl.getError();
+    if (uploadError !== gl.NO_ERROR) {
+      this.lastGlError = uploadError;
+      this.broken = true;
+      return;
+    }
 
     if (this.canvas.width !== this.vpWidth || this.canvas.height !== this.vpHeight) {
       this.vpWidth = this.canvas.width;
@@ -90,11 +121,29 @@ export class WebGL2Renderer implements Renderer {
     gl.uniform2f(this.uniform.uAtlasCell, atlas.cellWidth, atlas.cellHeight);
     gl.uniform3f(this.uniform.uBg, bg[0], bg[1], bg[2]);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
+    const drawError = gl.getError();
+    if (drawError !== gl.NO_ERROR) {
+      this.lastGlError = drawError;
+      this.broken = true;
+    }
   }
 
   /** context lost を検知したか（app.ts が Canvas 2D へフォールバックする判定に使う） */
   isContextLost(): boolean {
     return this.lost || this.gl.isContextLost();
+  }
+
+  /** GL エラー（転送・描画の失敗）を検知したか（同上。検知後は描画しない） */
+  isBroken(): boolean {
+    return this.broken;
+  }
+
+  /** fps オーバーレイなどに出す診断文字列（テクスチャ上限と GL エラーの有無。P-3 / D-011） */
+  diagnosticText(): string {
+    const parts = [`maxTex${this.maxTextureSize}`];
+    if (this.lastGlError !== 0) parts.push(`glErr${this.lastGlError}`);
+    if (this.broken) parts.push('broken');
+    return parts.join(' ');
   }
 
   private buildProgram(): WebGLProgram {
@@ -133,8 +182,9 @@ void main() {
   float insetY = 0.5 / uAtlasCell.y;
   float au = (float(id) + clamp(fu, insetX, 1.0 - insetX)) / uAtlasCells.x;
   float av = clamp(1.0 - fv, insetY, 1.0 - insetY);
+  // アトラスは背景色まで塗った不透明画像なので、そのまま出力する（D-011）
   vec4 tex = texture(uAtlas, vec2(au, av));
-  outColor = vec4(mix(uBg, tex.rgb, tex.a), 1.0);
+  outColor = vec4(tex.rgb, 1.0);
 }`;
     const compile = (type: number, src: string): WebGLShader => {
       const shader = gl.createShader(type)!;

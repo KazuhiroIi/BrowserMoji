@@ -61,25 +61,48 @@ export class CameraSource {
     throw toCameraError(lastError);
   }
 
-  /** 映像の実際の解像度が読めるようになるまで待つ（§6 の「実際の値を読み取ってから処理」） */
+  /**
+   * drawImage で描けるようになるまで待つ（§6 の「実際の値を読み取ってから処理」）。
+   * 解像度が読めても readyState が HAVE_CURRENT_DATA 未満だと drawImage が何も描かず、
+   * 最初のフレームが「全セルが最も濃い文字」の出力（黒い画面）になるため、
+   * 最初のフレームのデータが到着するまで待つ（D-011）
+   */
   private waitReady(video: HTMLVideoElement): Promise<void> {
-    if (video.videoWidth > 0 && video.videoHeight > 0) return Promise.resolve();
+    const hasFrame = (): boolean =>
+      video.videoWidth > 0 && video.videoHeight > 0 && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA;
+    if (hasFrame()) return Promise.resolve();
     return new Promise((resolve, reject) => {
-      const timeout = window.setTimeout(() => reject(new CameraError('cameraNotFound')), 10000);
+      const cleanup = (): void => {
+        window.clearTimeout(timeout);
+        video.removeEventListener('loadeddata', check);
+        video.removeEventListener('canplay', check);
+        video.removeEventListener('loadedmetadata', check);
+        video.removeEventListener('error', onError);
+      };
+      const timeout = window.setTimeout(() => {
+        cleanup();
+        if (video.videoWidth > 0) {
+          // メタデータは得られている: 従来どおり進める（環境差で待ち続けるより安全）
+          resolve();
+        } else {
+          reject(new CameraError('cameraNotFound'));
+        }
+      }, 10000);
       const check = (): void => {
-        if (video.videoWidth > 0 && video.videoHeight > 0) {
-          window.clearTimeout(timeout);
-          video.removeEventListener('loadedmetadata', check);
-          video.removeEventListener('error', onError);
+        if (hasFrame()) {
+          cleanup();
           resolve();
         }
       };
       const onError = (): void => {
-        window.clearTimeout(timeout);
+        cleanup();
         reject(new CameraError('cameraNotFound'));
       };
-      video.addEventListener('loadedmetadata', check);
+      video.addEventListener('loadeddata', check);
+      video.addEventListener('canplay', check);
+      video.addEventListener('loadedmetadata', check); // readyState が先に進んでいる環境の保険
       video.addEventListener('error', onError);
+      check(); // 呼び出し時点で用意できている場合の保険
     });
   }
 }

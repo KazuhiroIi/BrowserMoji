@@ -10,7 +10,7 @@ import { Canvas2DRenderer } from '../pipeline/renderer';
 import { WebGL2Renderer, isWebGL2Available } from '../pipeline/rendererWebGL2';
 import { DensityEdgeGlyphSelector } from '../pipeline/glyphSelector';
 import { type MessageKey, t } from '../i18n';
-import { createFpsIndicator, FpsStats, type FpsIndicator, type StageTimings } from './fps';
+import { createFpsIndicator, FpsStats, STALL_RESET_MS, type FpsIndicator, type StageTimings } from './fps';
 import { setTestHook } from './testHook';
 import { createSettingsPanel } from './settingsPanel';
 import { createStartScreen, type StartScreen } from './startScreen';
@@ -88,9 +88,11 @@ export class App {
     this.canvas = canvas;
     this.workCanvas = document.createElement('canvas');
 
-    // 設定パネル（F-6）と fps 表示（P-3）
+    // 設定パネル（F-6）と fps 表示（P-3）。fps 表示は最初のフレーム完了を待たず
+    // すぐ見えるようにする（実機では最初のフレームに数秒かかることがある。P-3 / D-011）
     createSettingsPanel(this.root, this.cfg, isWebGL2Available());
     this.fps = createFpsIndicator(this.root);
+    this.fps.setVisible(this.cfg.showFps);
 
     // e2e テスト用の計測フック（e2e/README.md）。テストが fps 統計と
     // 描画方式の実態を FPS 表示の DOM パースに頼らず読めるようにする
@@ -146,9 +148,10 @@ export class App {
       this.activeRendererKind = this.cfg.renderer;
     }
 
-    // 実行中の context lost を検知したら Canvas 2D にフォールバックする
+    // 実行中の context lost・GL エラー（テクスチャ転送の失敗など）を検知したら
+    // Canvas 2D にフォールバックする（D-011）
     const webgl = this.webglRenderer;
-    if (webgl?.isContextLost()) {
+    if (webgl && (webgl.isContextLost() || webgl.isBroken())) {
       const canvas = this.replaceCanvas();
       this.canvas2dRenderer = new Canvas2DRenderer(canvas, this.atlasProvider);
       this.webglRenderer = null;
@@ -217,8 +220,10 @@ export class App {
       }
 
       // fps 統計（P-3）: EMA ではなく直近 5 秒のローリング窓で平均・最小を取る。
-      // タブの非表示などで長く止まっていたフレームは瞬間値が極端になるため窓を立て直す
-      if (dt > 0 && dt < 1000) {
+      // タブの非表示などで長く止まっていたフレームは瞬間値が極端になるため窓を立て直す。
+      // 1〜5 秒のフレーム間隔は「重いが動いている」状態として記録する（実機で 0.0 表示
+      // にならないようにする。P-3 / D-011）
+      if (dt > 0 && dt < STALL_RESET_MS) {
         this.fpsStats.add(now, 1000 / dt, metadata ? metadata.presentedFrames : null, stages);
       } else {
         this.fpsStats.clear();
@@ -226,7 +231,10 @@ export class App {
 
       if (this.fps) {
         this.fps.setVisible(this.cfg.showFps);
-        this.fps.update(this.fpsStats.snapshot(), this.cfg.columns, renderer.renderMethod);
+        // WebGL2 のときはテクスチャ上限と GL エラーの状態も出す（実機の黒画面調査用。D-011）
+        const diagnostics =
+          renderer instanceof WebGL2Renderer ? renderer.diagnosticText() : null;
+        this.fps.update(this.fpsStats.snapshot(), this.cfg.columns, renderer.renderMethod, diagnostics);
       }
     } catch (e) {
       // 例外を放置するとフレームループが止まったまま白画面になるため、

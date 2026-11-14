@@ -45,7 +45,12 @@ export type GlyphAtlas = {
 };
 
 export interface AtlasProvider {
-  getAtlas(cfg: AppConfig): GlyphAtlas;
+  /**
+   * アトラスを返す。maxAtlasWidth を渡すと、アトラス 1 行の幅がその値以内に
+   * 収まるようセル幅を縮めて構成する（WebGL2 のテクスチャ幅上限。D-011）。
+   * 上限が極端に小さく収められない場合は例外を投げる（呼び出し側がフォールバックする）。
+   */
+  getAtlas(cfg: AppConfig, maxAtlasWidth?: number): GlyphAtlas;
 }
 
 /**
@@ -116,7 +121,8 @@ const STRAIGHT_LINES: ReadonlyArray<readonly [string, number]> = [
   ['╱', 135], ['／', 135], // スラッシュ
 ];
 
-const ATLAS_CELL = 96; // アトラス 1 セルのピクセル数（転写時に拡大縮小される）
+const ATLAS_CELL = 96; // アトラス 1 セルの基本ピクセル数（転写時に拡大縮小される。上限対応で縮めることがある。D-011）
+const MIN_ATLAS_CELL = 16; // テクスチャ幅上限対応で縮めるセル幅の下限。これでも収まらなければ例外（Canvas 2D へフォールバック）
 const FONT_FAMILY = `"Noto Sans JP", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, sans-serif`;
 
 /** アトラス画像は DOM に追加しない（画面に出ない canvas）で生成する */
@@ -157,22 +163,39 @@ function measureInk(char: string): number {
 export class DummyAtlasProvider implements AtlasProvider {
   private cache = new Map<string, GlyphAtlas>();
 
-  getAtlas(cfg: AppConfig): GlyphAtlas {
-    let atlas = this.cache.get(cfg.charset);
+  getAtlas(cfg: AppConfig, maxAtlasWidth?: number): GlyphAtlas {
+    const key = `${cfg.charset}/${maxAtlasWidth ?? ''}`;
+    let atlas = this.cache.get(key);
     if (!atlas) {
-      atlas = buildDummyAtlas(cfg.charset);
-      this.cache.set(cfg.charset, atlas);
+      atlas = buildDummyAtlas(cfg.charset, maxAtlasWidth);
+      this.cache.set(key, atlas);
     }
     return atlas;
   }
 }
 
-export function buildDummyAtlas(charset: string): GlyphAtlas {
+export function buildDummyAtlas(charset: string, maxAtlasWidth?: number): GlyphAtlas {
   // グリフの一覧を作る（重複はまとめる）
   const chars: string[] = [];
   for (const c of [...DENSITY_CHARS, ...LINE_CHARS]) {
     if (!chars.includes(c)) chars.push(c);
   }
+
+  /**
+   * 1 セル幅。maxAtlasWidth（WebGL2 のテクスチャ幅上限など）を超えるときは
+   * 1 セル幅を縮めて 1 行のアトラスに収める（D-011）。転写先の出力セルは
+   * 多くても数十 px なので、66px などへの縮小は見た目にほぼ影響しない。
+   */
+  let cell = ATLAS_CELL;
+  if (maxAtlasWidth !== undefined && chars.length * cell > maxAtlasWidth) {
+    cell = Math.floor(maxAtlasWidth / chars.length);
+    if (cell < MIN_ATLAS_CELL) {
+      throw new Error(
+        `アトラス（${chars.length} グリフ）をテクスチャ幅上限 ${maxAtlasWidth}px に収められない`,
+      );
+    }
+  }
+
   const idOf = new Map<string, number>();
   const glyphs: GlyphInfo[] = chars.map((char, id) => {
     idOf.set(char, id);
@@ -192,16 +215,23 @@ export function buildDummyAtlas(charset: string): GlyphAtlas {
     })
     .filter((g): g is StraightLineGlyph => g !== null);
 
-  // 前景色ごとのアトラス画像を用意する（既定: 白背景＋黒文字、invert で反転。T-6）
+  // 前景色ごとのアトラス画像を用意する（既定: 白背景＋黒文字、invert で反転。T-6）。
+  // 背景も塗った**不透明**な canvas にする（D-011）。かつては透明背景＋文字だけを
+  // 描き、WebGL2 シェーダ側で背景色と alpha で合成していたが、テクスチャ転送の
+  // 失敗（不完全テクスチャは不透明黒を返す）や端末の alpha 取扱い差で黒画面になる
+  // 要因になっていた。不透明にすればシェーダは tex.rgb をそのまま出力するだけでよい
   const canvases = new Map<FgColor, HTMLCanvasElement>();
   const canvasFor = (fg: FgColor): HTMLCanvasElement => {
     let canvas = canvases.get(fg);
     if (!canvas) {
-      canvas = createOffscreenCanvas(ATLAS_CELL * glyphs.length, ATLAS_CELL);
+      canvas = createOffscreenCanvas(cell * glyphs.length, cell);
       const ctx = canvas.getContext('2d');
       if (ctx) {
+        const bgColor = fg === 'black' ? '#ffffff' : '#000000';
         const color = fg === 'black' ? '#000000' : '#ffffff';
-        glyphs.forEach((g) => drawGlyphCell(ctx, g.char, g.id * ATLAS_CELL, color));
+        ctx.fillStyle = bgColor;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        glyphs.forEach((g) => drawGlyphCell(ctx, g.char, g.id * cell, color, cell));
       }
       canvases.set(fg, canvas);
     }
@@ -210,8 +240,8 @@ export function buildDummyAtlas(charset: string): GlyphAtlas {
 
   return {
     charset,
-    cellWidth: ATLAS_CELL,
-    cellHeight: ATLAS_CELL,
+    cellWidth: cell,
+    cellHeight: cell,
     glyphs,
     densityIds,
     straightLines,

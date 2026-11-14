@@ -43,6 +43,14 @@ export type FpsSnapshot = {
 const WINDOW_MS = 5000;
 
 /**
+ * 窓を立て直すフレーム間隔のしきい値（ms）。
+ * これより長く止まっていたら（タブの非表示など）窓を捨てる。1〜5 秒のフレーム間隔は
+ * 「重いが動いている」状態なので、0.2〜1.0 fps として窓に記録する（実機の低 fps を
+ * 0.0 と表示しないため。P-3 / D-011）
+ */
+export const STALL_RESET_MS = 5000;
+
+/**
  * 直近 5 秒のローリング窓で fps とステージ別処理時間の統計を取る（P-3）。
  * EMA ではなく窓内の瞬間値（1000/dt）から平均・最小を求める。
  */
@@ -121,17 +129,19 @@ export class FpsStats {
 
 /** デバッグ用の統計オーバーレイ（P-3）。showFps の ON/OFF で表示を切り替える */
 export type FpsIndicator = {
-  update(snapshot: FpsSnapshot, columns: number, renderMethod: string): void;
+  update(snapshot: FpsSnapshot, columns: number, renderMethod: string, diagnostics?: string | null): void;
   setVisible(visible: boolean): void;
 };
 
 export function createFpsIndicator(root: HTMLElement): FpsIndicator {
   const node = el('div', 'fps-indicator');
+  // 最初のフレームが完了するまでの間の表示（実機では数秒かかることがある）
+  node.textContent = t('fpsMeasuring');
   node.hidden = true;
   root.append(node);
   let last = '';
   return {
-    update(snapshot, columns, renderMethod): void {
+    update(snapshot, columns, renderMethod, diagnostics): void {
       // 表記は言語依存の整形を避け、文言側で組み立てる（architecture.md §12）
       const cam =
         snapshot.camFps === null
@@ -146,7 +156,7 @@ export function createFpsIndicator(root: HTMLElement): FpsIndicator {
         `${t('fpsFeat')} ${snapshot.stages.feat.toFixed(1)} ${t('msLabel')}`,
         `${t('fpsSel')} ${snapshot.stages.sel.toFixed(1)} ${t('msLabel')}`,
         `${t('fpsDraw')} ${snapshot.stages.draw.toFixed(1)} ${t('msLabel')}`,
-        `${t('fpsCols')} ${columns} / ${renderMethod}`,
+        `${t('fpsCols')} ${columns} / ${renderMethod}${diagnostics ? ` / ${diagnostics}` : ''}`,
       ];
       const text = rows.join('\n');
       if (text !== last) {

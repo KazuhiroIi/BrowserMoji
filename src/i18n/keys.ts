@@ -28,6 +28,7 @@ export const messageKeys = [
   'settingEdgePriority',
   'settingInvert',
   'settingShowFps',
+  'fpsMeasuring',
   'fpsLabel',
   'msLabel',
   'fpsAvg',
