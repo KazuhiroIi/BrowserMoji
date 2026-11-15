@@ -27,3 +27,10 @@ data/
 results/
 test-results/
 playwright-report/
+
+# 実験コードの実行画像（out/montage/overlay には顔・自宅周辺の写真を含むため公開しない）
+experiment/**/.venv*/
+experiment/**/*.jpg
+experiment/**/*.png
+experiment/**/*.webm
+experiment/**/*.mp4

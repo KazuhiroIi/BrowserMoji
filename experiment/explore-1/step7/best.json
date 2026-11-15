@@ -1,0 +1,5 @@
+{
+ "pca-canny": "pca-canny/mep5_r0.35_er0.02",
+ "nms-canny": "nms-canny/r1_mv5",
+ "edl-bilat": "edl-bilat/g20_r1.0_msp5"
+}
