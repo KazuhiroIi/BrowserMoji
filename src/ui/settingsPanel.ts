@@ -1,4 +1,5 @@
-import type { AppConfig, RendererKind } from '../config';
+import type { AppConfig, PipelineMode, RendererKind } from '../config';
+import { applyModeDefaults } from '../config';
 import { t } from '../i18n';
 import { el } from './dom';
 
@@ -30,19 +31,31 @@ export function createSettingsPanel(
     cfg.renderer = v as RendererKind;
   });
 
-  // 列数（F-5）
-  addSlider(panel, t('settingColumns'), cfg.columns, 8, 160, 1, (v) => {
+  // パイプラインの方式（EXP-2 / EXP-3 適用前の classic と、基準実装準拠の selectorA。
+  // 切替 UI で変更し、次フレームから反映する。切替時に列数・しきい値・文字セットを
+  // モードの既定値へ入れ替える）
+  addSelect(panel, t('settingMode'), cfg.mode, [
+    { value: 'classic', label: t('settingModeClassic') },
+    { value: 'selectorA', label: t('settingModeSelectorA') },
+  ], '', (v) => {
+    cfg.mode = v as PipelineMode;
+    applyModeDefaults(cfg);
+    columnsSlider.setValue(cfg.columns);
+    edgeThresholdSlider.setValue(cfg.edgeThreshold);
+  });
+
+  // 列数（F-5）とエッジのしきい値はモード切替で既定値に入れ替わるため、
+  // 切替後に表示を更新できるよう戻り値を受けておく
+  const columnsSlider = addSlider(panel, t('settingColumns'), cfg.columns, 8, 160, 1, (v) => {
     cfg.columns = Math.round(v);
   }, (v) => String(Math.round(v)));
+  const edgeThresholdSlider = addSlider(panel, t('settingEdgeThreshold'), cfg.edgeThreshold, 0, 1, 0.01, (v) => {
+    cfg.edgeThreshold = v;
+  }, (v) => v.toFixed(2));
 
   // コントラスト
   addSlider(panel, t('settingContrast'), cfg.contrast, 0.5, 3, 0.05, (v) => {
     cfg.contrast = v;
-  }, (v) => v.toFixed(2));
-
-  // エッジのしきい値
-  addSlider(panel, t('settingEdgeThreshold'), cfg.edgeThreshold, 0, 1, 0.01, (v) => {
-    cfg.edgeThreshold = v;
   }, (v) => v.toFixed(2));
 
   // エッジの強さ（置換のしやすさ）
@@ -117,7 +130,7 @@ function addSlider(
   step: number,
   onChange: (value: number) => void,
   format: SliderFormat,
-): void {
+): SliderHandle {
   const row = el('div', 'settings-row');
   const input = document.createElement('input');
   input.type = 'range';
@@ -133,7 +146,18 @@ function addSlider(
   });
   row.append(el('label', undefined, label), input, value);
   parent.append(row);
+  return {
+    /** プログラム側で値を変えたときに表示へ反映する（モード切替時の既定値入れ替え用） */
+    setValue(v: number): void {
+      input.value = String(v);
+      value.textContent = format(v);
+    },
+  };
 }
+
+type SliderHandle = {
+  setValue(value: number): void;
+};
 
 function addCheckbox(
   parent: HTMLElement,

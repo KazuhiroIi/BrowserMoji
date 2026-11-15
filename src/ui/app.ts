@@ -5,10 +5,11 @@ import { DummyAtlasProvider } from '../pipeline/atlas';
 import { CpuFeatureExtractor } from '../pipeline/featureExtractor';
 import { computeGrid } from '../pipeline/grid';
 import { sampleFrame } from '../pipeline/preprocess';
-import type { RendererKind } from '../config';
+import { effectiveFeaturePx, type PipelineMode, type RendererKind } from '../config';
 import { Canvas2DRenderer } from '../pipeline/renderer';
 import { WebGL2Renderer, isWebGL2Available } from '../pipeline/rendererWebGL2';
-import { DensityEdgeGlyphSelector } from '../pipeline/glyphSelector';
+import { ClassicGlyphSelector, DensityEdgeGlyphSelector } from '../pipeline/glyphSelector';
+import type { GlyphSelector } from '../pipeline/types';
 import { type MessageKey, t } from '../i18n';
 import { createFpsIndicator, FpsStats, STALL_RESET_MS, type FpsIndicator, type StageTimings } from './fps';
 import { setTestHook } from './testHook';
@@ -33,7 +34,9 @@ export class App {
 
   private readonly atlasProvider = new DummyAtlasProvider();
   private readonly extractor = new CpuFeatureExtractor();
-  private readonly selector: DensityEdgeGlyphSelector;
+  private selector: GlyphSelector;
+  /** 現在使っているパイプラインの方式（cfg.mode の選択結果） */
+  private activeSelectorMode: PipelineMode;
   /** 現在使っている描画方式（cfg.renderer の選択・フォールバックの結果） */
   private activeRendererKind: RendererKind = 'canvas2d';
   /** WebGL2 が使えない / context lost になった後の再試行を防ぐフラグ */
@@ -46,7 +49,21 @@ export class App {
     private root: HTMLElement,
     private cfg: AppConfig,
   ) {
-    this.selector = new DensityEdgeGlyphSelector(this.atlasProvider);
+    this.selector = createGlyphSelector(cfg.mode, this.atlasProvider);
+    this.activeSelectorMode = cfg.mode;
+  }
+
+  /**
+   * cfg.mode の選択に合わせて文字選択方式を用意する（切替は次フレームから反映）。
+   * classic は適用前の実装（等分量子化 + 4 方向の線置換）、selectorA は基準実装
+   * （selector.py の SelectorA）と同じ意味の現行実装（D-009）。
+   */
+  private ensureSelector(): GlyphSelector {
+    if (this.cfg.mode !== this.activeSelectorMode) {
+      this.selector = createGlyphSelector(this.cfg.mode, this.atlasProvider);
+      this.activeSelectorMode = this.cfg.mode;
+    }
+    return this.selector;
   }
 
   showStart(): void {
@@ -190,11 +207,18 @@ export class App {
       if (canvas.width !== targetW) canvas.width = targetW;
       if (canvas.height !== targetH) canvas.height = targetH;
 
-      const grid = computeGrid(canvas.width, canvas.height, this.cfg.columns, this.cfg.featurePx);
+      const grid = computeGrid(
+        canvas.width,
+        canvas.height,
+        this.cfg.columns,
+        effectiveFeaturePx(this.cfg),
+      );
       const sampled = sampleFrame(video, grid, work);
 
       // 描画方式: cfg.renderer の選択に追従する（切替・フォールバックは次フレームから反映）
       const renderer = this.ensureRenderer();
+      // 文字選択方式: cfg.mode の選択に追従する（切替は次フレームから反映）
+      const selector = this.ensureSelector();
 
       // ステージ別の処理時間を計測する（P-3）。前処理 blit / read は sampleFrame が測る
       let stages: StageTimings | null = null;
@@ -203,7 +227,7 @@ export class App {
         const extractStart = performance.now();
         const features = this.extractor.extract(sampled.frame, grid, this.cfg);
         const selectStart = performance.now();
-        const glyphIds = this.selector.select(features, this.cfg);
+        const glyphIds = selector.select(features, this.cfg);
         const renderStart = performance.now();
         renderer.render(glyphIds, grid, this.cfg);
         stages.feat = selectStart - extractStart;
@@ -260,6 +284,13 @@ export class App {
     screen.append(errorBox);
     this.root.append(screen);
   }
+}
+
+/** cfg.mode に対応する文字選択方式を生成する（N-3 の差し替え可能な段階） */
+function createGlyphSelector(mode: PipelineMode, atlasProvider: DummyAtlasProvider): GlyphSelector {
+  return mode === 'classic'
+    ? new ClassicGlyphSelector(atlasProvider)
+    : new DensityEdgeGlyphSelector(atlasProvider);
 }
 
 /** CameraError（と予期しないエラー）を F-9 の文言キーへ写像する */

@@ -10,6 +10,7 @@ import {
   setupCameraMock,
   startApp,
   waitForFrames,
+  pinSelectorAMode,
 } from './helpers';
 
 /**
@@ -62,6 +63,8 @@ test('動画ストリームで描画が継続し、画面が更新される', as
 test('固定フレーム: WebGL2 出力が基準画像と一致する', async ({ context }) => {
   const page = await setupCameraMock(context, 'still');
   await startApp(page);
+  // 基準画像は selectorA の出力で作られているため、既定の classic ではなく固定する
+  await pinSelectorAMode(page);
   await expectRenderer(page, 'webgl2');
   // スクリーンショットは canvas 要素の全面を撮るため、オーバーレイ（fps 表示・設定パネル）
   // が写り込む。fps 表示は数字が実行ごとに変わるため、基準比較の前に必ず消す
@@ -80,6 +83,8 @@ test('固定フレーム: WebGL2 出力が基準画像と一致する', async ({
 test('固定フレーム: Canvas 2D 出力が基準画像と一致する', async ({ context }) => {
   const page = await setupCameraMock(context, 'still');
   await startApp(page);
+  // 基準画像は selectorA の出力で作られているため、既定の classic ではなく固定する
+  await pinSelectorAMode(page);
   const before = await frameCount(page);
   await switchRendererViaUi(page, 'canvas2d');
   await ensureFpsOffWhilePanelOpen(page);
@@ -154,7 +159,8 @@ async function expectRenderer(page: Page, expected: string): Promise<void> {
 /** 設定パネル UI で描画方式を切り替える（本番の操作フローを通す） */
 async function switchRendererViaUi(page: Page, value: string): Promise<void> {
   await page.locator('.settings-toggle').click();
-  await page.locator('.settings-panel select').selectOption(value);
+  // 1 番目の select = 描画方式（2 番目は文字選択方式。mode）
+  await page.locator('.settings-panel select').first().selectOption(value);
   await expectRenderer(page, value);
 }
 

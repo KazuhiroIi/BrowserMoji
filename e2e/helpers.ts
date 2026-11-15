@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { BrowserContext, Page } from '@playwright/test';
+import { expect, type BrowserContext, type Page } from '@playwright/test';
 
 /** リポジトリのルート（playwright.config.ts と同じ場所） */
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -102,6 +102,29 @@ export async function startApp(page: Page): Promise<void> {
   await page.locator('.start-button').click();
   await page.waitForSelector('canvas.ascii-canvas');
   await page.waitForFunction(() => window.__bmTest?.isRunning() === true);
+}
+
+/**
+ * 設定パネル UI でパイプラインの方式（mode）を切り替える。
+ * パネルを開いた状態で返る。select は「描画方式」（1 番目）と「文字選択方式」
+ * （2 番目）の 2 つがあるため、位置で特定する。
+ */
+export async function switchPipelineModeViaUi(page: Page, value: string): Promise<void> {
+  await page.locator('.settings-toggle').click();
+  await page.locator('.settings-panel select').nth(1).selectOption(value);
+  // パネルを閉じて戻る（呼び出し側が開く操作をするため。開いたままだと
+  // 呼び出し側の click がトグルになって閉じてしまう）
+  await page.locator('.settings-toggle').click();
+  await expect(page.locator('.settings-panel')).toBeHidden();
+}
+
+/**
+ * テストを既定の方式（classic）ではなく selectorA で固定する。
+ * 基準画像（data/baselines）は selectorA の出力で作られているため、
+ * 正しさの比較・62 文字アトラスを前提とするテストでは呼ぶ。
+ */
+export async function pinSelectorAMode(page: Page): Promise<void> {
+  await switchPipelineModeViaUi(page, 'selectorA');
 }
 
 /** 累積フレームカウンタが n を超えるまで待つ（長い 1 フレームにも耐えるよう timeout を指定できる） */

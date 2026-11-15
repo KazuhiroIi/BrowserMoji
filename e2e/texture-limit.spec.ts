@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { PNG } from 'pngjs';
-import { setupCameraMock, startApp, waitForFrames } from './helpers';
+import { setupCameraMock, startApp, waitForFrames, pinSelectorAMode } from './helpers';
 
 /**
  * テクスチャ幅上限への対応の確認（D-011）。
@@ -63,6 +63,8 @@ test('MAX_TEXTURE_SIZE=4096 でも WebGL2 のまま描画する（アトラス�
   await context.addInitScript(forceMaxTextureSize, 4096);
   const page = await setupCameraMock(context, 'still');
   await startApp(page);
+  // 62 文字（selectorA）のアトラスが前提。classic の 13 文字では上限に届かないため固定する
+  await pinSelectorAMode(page);
   // フォールバックしていないこと（フォールバックすると canvas2d になる）
   await expectRenderer(page, 'webgl2');
   await waitForFrames(page, 3);
@@ -80,6 +82,8 @@ test('MAX_TEXTURE_SIZE が極端に小さい場合は Canvas 2D にフォール�
   await context.addInitScript(forceMaxTextureSize, 512);
   const page = await setupCameraMock(context, 'still');
   await startApp(page);
+  // 62 文字（selectorA）のアトラスが前提。classic の 13 文字では 512px に収まってしまう
+  await pinSelectorAMode(page);
   await expectRenderer(page, 'canvas2d');
   await waitForFrames(page, 3);
   const shot = await page.locator('canvas.ascii-canvas').screenshot();
