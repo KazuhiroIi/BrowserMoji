@@ -47,6 +47,11 @@ export type AppConfig = {
   edgeOnly: boolean;
   /** 使用する文字セット（F-13 で切り替え UI を追加する予定） */
   charset: string;
+  /**
+   * カスタムフィラー文字セット（null のときはモード既定の文字セットを使う）。
+   * 設定パネルの入力欄からリアルタイムに編集できる。
+   */
+  fillerChars: string | null;
   /** デバッグ用 fps 表示（P-3） */
   showFps: boolean;
 };
@@ -73,6 +78,7 @@ export const defaultConfig: AppConfig = {
   edgeOnly: false,
   // classic モードの既定文字セット（076886d 適用前のダミーセット）
   charset: 'default',
+  fillerChars: null,
   // EXP-1 で実機 fps を計測するため既定 ON。設定パネルで OFF にできる
   showFps: true,
 };
@@ -85,9 +91,9 @@ export const modeDefaults: Record<PipelineMode, Pick<AppConfig, 'columns' | 'edg
   selectorA: { columns: 100, edgeThreshold: 0.14, charset: 'all' },
 };
 
-/** モード切替時にモードの既定値へ入れ替える（columns・edgeThreshold・charset） */
+/** モード切替時にモードの既定値へ入れ替える（columns・edgeThreshold・charset・fillerChars） */
 export function applyModeDefaults(cfg: AppConfig): void {
-  Object.assign(cfg, modeDefaults[cfg.mode]);
+  Object.assign(cfg, modeDefaults[cfg.mode], { fillerChars: null });
 }
 
 /**

@@ -31,6 +31,8 @@ export const messageKeys = [
   'settingEdgePriority',
   'settingInvert',
   'settingEdgeOnly',
+  'settingFillerChars',
+  'settingFillerCharsReset',
   'settingShowFps',
   'fpsMeasuring',
   'fpsLabel',

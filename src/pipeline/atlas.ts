@@ -195,25 +195,51 @@ function measureInk(char: string): number {
   return sum / (255 * size * size);
 }
 
+/** 指定 charset の既定フィラー文字セットを 1 つの文字列として返す */
+export function getDefaultFillerChars(charset: string): string {
+  const chars = charset === 'default' ? LEGACY_DENSITY_CHARS : DENSITY_CHARS;
+  return chars.join('');
+}
+
+/** 入力文字列からフィラー文字の配列を作る（改行除去・重複除去・空欄時は全角スペース） */
+function parseFillerChars(raw: string): string[] {
+  const unique: string[] = [];
+  for (const ch of Array.from(raw.replace(/[\r\n]/g, ''))) {
+    if (!unique.includes(ch)) unique.push(ch);
+  }
+  return unique.length > 0 ? unique : ['　'];
+}
+
 export class DummyAtlasProvider implements AtlasProvider {
   private cache = new Map<string, GlyphAtlas>();
 
   getAtlas(cfg: AppConfig, maxAtlasWidth?: number): GlyphAtlas {
-    const key = `${cfg.charset}/${maxAtlasWidth ?? ''}`;
+    const key = `${cfg.charset}/${cfg.fillerChars ?? ''}/${maxAtlasWidth ?? ''}`;
     let atlas = this.cache.get(key);
     if (!atlas) {
-      atlas = buildDummyAtlas(cfg.charset, maxAtlasWidth);
+      if (this.cache.size > 20) this.cache.clear();
+      atlas = buildDummyAtlas(cfg.charset, maxAtlasWidth, cfg.fillerChars);
       this.cache.set(key, atlas);
     }
     return atlas;
   }
 }
 
-export function buildDummyAtlas(charset: string, maxAtlasWidth?: number): GlyphAtlas {
+export function buildDummyAtlas(
+  charset: string,
+  maxAtlasWidth?: number,
+  fillerChars?: string | null,
+): GlyphAtlas {
   // 文字セットは charset 値で選ぶ（unknown は all = 現行セットにフォールバック）
   const legacy = charset === 'default';
-  const densityChars = legacy ? LEGACY_DENSITY_CHARS : DENSITY_CHARS;
+  const densityChars =
+    fillerChars != null
+      ? parseFillerChars(fillerChars)
+      : legacy
+        ? LEGACY_DENSITY_CHARS
+        : DENSITY_CHARS;
   const lineChars = legacy ? LEGACY_LINE_CHARS : LINE_CHARS;
+  const atlasCharset = fillerChars != null ? `${charset}:${fillerChars}` : charset;
 
   // グリフの一覧を作る（重複はまとめる）
   const chars: string[] = [];
@@ -287,7 +313,7 @@ export function buildDummyAtlas(charset: string, maxAtlasWidth?: number): GlyphA
   };
 
   return {
-    charset,
+    charset: atlasCharset,
     cellWidth: cell,
     cellHeight: cell,
     glyphs,

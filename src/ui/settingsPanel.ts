@@ -1,6 +1,7 @@
 import type { AppConfig, PipelineMode, RendererKind } from '../config';
 import { applyModeDefaults } from '../config';
 import { t } from '../i18n';
+import { getDefaultFillerChars } from '../pipeline/atlas';
 import { el } from './dom';
 
 /**
@@ -42,6 +43,7 @@ export function createSettingsPanel(
     applyModeDefaults(cfg);
     columnsSlider.setValue(cfg.columns);
     edgeThresholdSlider.setValue(cfg.edgeThreshold);
+    fillerCharsInput.setValue(getDefaultFillerChars(cfg.charset));
   });
 
   // 列数（F-5）とエッジのしきい値はモード切替で既定値に入れ替わるため、
@@ -72,6 +74,21 @@ export function createSettingsPanel(
   addCheckbox(panel, t('settingEdgeOnly'), cfg.edgeOnly, (v) => {
     cfg.edgeOnly = v;
   });
+
+  // フィラー文字（リアルタイム編集用 textarea + 既定に戻すボタン）
+  const fillerCharsInput = addFillerCharsEditor(
+    panel,
+    t('settingFillerChars'),
+    t('settingFillerCharsReset'),
+    cfg.fillerChars ?? getDefaultFillerChars(cfg.charset),
+    (value) => {
+      cfg.fillerChars = value;
+    },
+    () => {
+      cfg.fillerChars = null;
+      return getDefaultFillerChars(cfg.charset);
+    },
+  );
 
   // fps 表示（P-3）
   addCheckbox(panel, t('settingShowFps'), cfg.showFps, (v) => {
@@ -177,4 +194,47 @@ function addCheckbox(
   input.addEventListener('change', () => onChange(input.checked));
   row.append(el('label', undefined, label), input);
   parent.append(row);
+}
+
+function addFillerCharsEditor(
+  parent: HTMLElement,
+  label: string,
+  resetLabel: string,
+  initialValue: string,
+  onChange: (value: string) => void,
+  onReset: () => string,
+): { setValue(value: string): void } {
+  const row = el('div', 'settings-row settings-row-stack');
+  const header = el('div', 'settings-row-header');
+  const resetBtn = el('button', 'settings-reset-btn', resetLabel);
+  resetBtn.type = 'button';
+  header.append(el('label', undefined, label), resetBtn);
+
+  const textarea = document.createElement('textarea');
+  textarea.className = 'settings-textarea';
+  textarea.rows = 2;
+  textarea.value = initialValue;
+
+  let timer: number | undefined;
+  textarea.addEventListener('input', () => {
+    window.clearTimeout(timer);
+    timer = window.setTimeout(() => {
+      onChange(textarea.value);
+    }, 120);
+  });
+
+  resetBtn.addEventListener('click', () => {
+    window.clearTimeout(timer);
+    textarea.value = onReset();
+  });
+
+  row.append(header, textarea);
+  parent.append(row);
+
+  return {
+    setValue(value: string): void {
+      window.clearTimeout(timer);
+      textarea.value = value;
+    },
+  };
 }
