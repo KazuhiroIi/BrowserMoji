@@ -1,6 +1,8 @@
 /** F-9 のエラー種別。表示文言（対処法）は i18n 側で持つ */
 export type CameraErrorCode = 'permissionDenied' | 'cameraNotFound' | 'cameraBusy' | 'unsupported';
 
+export type FacingMode = 'environment' | 'user';
+
 export class CameraError extends Error {
   constructor(public readonly code: CameraErrorCode, message?: string) {
     super(message ?? code);
@@ -16,7 +18,22 @@ export class CameraError extends Error {
  * - 要求した解像度と実際の解像度は異なることがあるため、videoWidth/Height を読んでから処理に渡す
  */
 export class CameraSource {
-  async start(): Promise<HTMLVideoElement> {
+  private currentStream: MediaStream | null = null;
+  private currentFacingMode: FacingMode = 'environment';
+
+  get facingMode(): FacingMode {
+    return this.currentFacingMode;
+  }
+
+  stop(): void {
+    if (!this.currentStream) return;
+    for (const track of this.currentStream.getTracks()) {
+      track.stop();
+    }
+    this.currentStream = null;
+  }
+
+  async start(facingMode: FacingMode = this.currentFacingMode): Promise<HTMLVideoElement> {
     if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function') {
       throw new CameraError('unsupported');
     }
@@ -25,7 +42,16 @@ export class CameraSource {
       throw new CameraError('unsupported');
     }
 
-    const stream = await this.openStream();
+    this.stop();
+    const stream = await this.openStream(facingMode);
+    this.currentStream = stream;
+
+    const trackFacing = stream.getVideoTracks()[0]?.getSettings?.().facingMode;
+    if (trackFacing === 'user' || trackFacing === 'environment') {
+      this.currentFacingMode = trackFacing;
+    } else {
+      this.currentFacingMode = facingMode;
+    }
 
     const video = document.createElement('video');
     video.playsInline = true;
@@ -40,11 +66,17 @@ export class CameraSource {
     return video;
   }
 
-  private async openStream(): Promise<MediaStream> {
+  async switchFacingMode(): Promise<HTMLVideoElement> {
+    const next: FacingMode = this.currentFacingMode === 'environment' ? 'user' : 'environment';
+    return this.start(next);
+  }
+
+  private async openStream(preferred: FacingMode): Promise<MediaStream> {
+    const fallback: FacingMode = preferred === 'environment' ? 'user' : 'environment';
     const constraints: MediaStreamConstraints[] = [
-      { video: { facingMode: { ideal: 'environment' } }, audio: false }, // 既定は背面カメラ（F-1）
+      { video: { facingMode: { ideal: preferred } }, audio: false },
       { video: true, audio: false }, // フォールバック: 制約なし
-      { video: { facingMode: { ideal: 'user' } }, audio: false }, // フォールバック: 前面
+      { video: { facingMode: { ideal: fallback } }, audio: false },
     ];
     let lastError: unknown;
     for (const constraint of constraints) {

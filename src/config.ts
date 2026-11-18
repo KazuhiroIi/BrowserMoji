@@ -43,6 +43,8 @@ export type AppConfig = {
   featurePx: number;
   /** 白黒反転（既定: 白背景＋黒文字、T-6） */
   invert: boolean;
+  /** 左右反転（ミラー表示。前面カメラ時は既定で true） */
+  mirror: boolean;
   /** エッジマスのみ描画（フィラーの濃度文字を描画せず空白にする） */
   edgeOnly: boolean;
   /** 使用する文字セット（F-13 で切り替え UI を追加する予定） */
@@ -75,6 +77,7 @@ export const defaultConfig: AppConfig = {
   // selectorA モードでのみ使う（classic モードは 1px = 1 セル。effectiveFeaturePx）
   featurePx: 16,
   invert: false,
+  mirror: false,
   edgeOnly: false,
   // classic モードの既定文字セット（076886d 適用前のダミーセット）
   charset: 'default',

@@ -66,6 +66,8 @@ export class App {
     return this.selector;
   }
 
+  private readonly cameraSource = new CameraSource();
+
   showStart(): void {
     const screen = createStartScreen(this.root, () => {
       void this.begin(screen);
@@ -86,8 +88,9 @@ export class App {
   private async begin(screen: StartScreen): Promise<void> {
     screen.setStarting();
     try {
-      const video = await new CameraSource().start();
+      const video = await this.cameraSource.start();
       this.video = video;
+      this.cfg.mirror = this.cameraSource.facingMode === 'user';
       screen.remove();
       this.runMain(video);
     } catch (e) {
@@ -107,7 +110,31 @@ export class App {
 
     // 設定パネル（F-6）と fps 表示（P-3）。fps 表示は最初のフレーム完了を待たず
     // すぐ見えるようにする（実機では最初のフレームに数秒かかることがある。P-3 / D-011）
-    createSettingsPanel(this.root, this.cfg, isWebGL2Available());
+    const settingsPanel = createSettingsPanel(this.root, this.cfg, isWebGL2Available());
+
+    const switchBtn = el('button', 'camera-switch-btn', '🔄');
+    switchBtn.type = 'button';
+    switchBtn.setAttribute('aria-label', t('cameraSwitch'));
+    switchBtn.title = t('cameraSwitch');
+    switchBtn.addEventListener('click', () => {
+      void (async () => {
+        switchBtn.disabled = true;
+        try {
+          const nextVideo = await this.cameraSource.switchFacingMode();
+          nextVideo.className = 'hidden-video';
+          this.video?.replaceWith(nextVideo);
+          this.video = nextVideo;
+          this.cfg.mirror = this.cameraSource.facingMode === 'user';
+          settingsPanel.syncMirror(this.cfg.mirror);
+          this.startLoop(nextVideo);
+        } catch {
+          // 1台しかカメラがない環境などで失敗しても現在の映像を継続する
+        } finally {
+          switchBtn.disabled = false;
+        }
+      })();
+    });
+    this.root.append(switchBtn);
     this.fps = createFpsIndicator(this.root);
     this.fps.setVisible(this.cfg.showFps);
 
@@ -120,6 +147,11 @@ export class App {
       isRunning: () => this.stopLoop !== null,
     });
 
+    this.startLoop(video);
+  }
+
+  private startLoop(video: HTMLVideoElement): void {
+    this.stopLoop?.();
     this.stopLoop = startFrameLoop(video, (now, metadata) => {
       this.tick(now, metadata);
     });
@@ -213,7 +245,9 @@ export class App {
         this.cfg.columns,
         effectiveFeaturePx(this.cfg),
       );
-      const sampled = sampleFrame(video, grid, work);
+      const activeVideo = this.video;
+      if (!activeVideo) return;
+      const sampled = sampleFrame(activeVideo, grid, work, this.cfg.mirror);
 
       // 描画方式: cfg.renderer の選択に追従する（切替・フォールバックは次フレームから反映）
       const renderer = this.ensureRenderer();

@@ -10,6 +10,7 @@ import { el } from './dom';
  */
 export type SettingsPanel = {
   toggle(): void;
+  syncMirror(mirror: boolean): void;
 };
 
 export function createSettingsPanel(
@@ -70,6 +71,11 @@ export function createSettingsPanel(
     cfg.invert = v;
   });
 
+  // 左右反転（前面カメラ時は既定で true）
+  const mirrorCheckbox = addCheckbox(panel, t('settingMirror'), cfg.mirror, (v) => {
+    cfg.mirror = v;
+  });
+
   // エッジのみ描画（フィラーの濃度文字を描画せず空白にする）
   addCheckbox(panel, t('settingEdgeOnly'), cfg.edgeOnly, (v) => {
     cfg.edgeOnly = v;
@@ -102,6 +108,9 @@ export function createSettingsPanel(
   return {
     toggle(): void {
       panel.hidden = !panel.hidden;
+    },
+    syncMirror(mirror: boolean): void {
+      mirrorCheckbox.setValue(mirror);
     },
   };
 }
@@ -186,7 +195,7 @@ function addCheckbox(
   label: string,
   initialValue: boolean,
   onChange: (value: boolean) => void,
-): void {
+): { setValue(v: boolean): void } {
   const row = el('div', 'settings-row');
   const input = document.createElement('input');
   input.type = 'checkbox';
@@ -194,6 +203,11 @@ function addCheckbox(
   input.addEventListener('change', () => onChange(input.checked));
   row.append(el('label', undefined, label), input);
   parent.append(row);
+  return {
+    setValue(v: boolean): void {
+      input.checked = v;
+    },
+  };
 }
 
 function addFillerCharsEditor(

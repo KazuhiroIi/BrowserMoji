@@ -35,6 +35,8 @@ export const ja: MessageDict = {
   settingEdgeThreshold: 'エッジのしきい値',
   settingEdgePriority: 'エッジの強さ',
   settingInvert: '白黒反転',
+  settingMirror: '左右反転',
+  cameraSwitch: 'カメラ切替',
   settingEdgeOnly: 'エッジのみ描画',
   settingFillerChars: 'フィラー文字',
   settingFillerCharsReset: '既定に戻す',

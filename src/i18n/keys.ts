@@ -18,6 +18,8 @@ export const messageKeys = [
   'errorRenderLoopTitle',
   'errorRenderLoopBody',
   'settingsToggle',
+  'cameraSwitch',
+  'settingMirror',
   'settingRenderer',
   'settingRendererCanvas2d',
   'settingRendererWebgl2',

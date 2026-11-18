@@ -142,6 +142,26 @@ video.hidden-video {
   cursor: pointer;
 }
 
+.camera-switch-btn {
+  position: fixed;
+  top: 10px;
+  right: 80px;
+  z-index: 20;
+  padding: 8px 10px;
+  border: 1px solid #777777;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #111111;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.camera-switch-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .settings-panel {
   position: fixed;
   top: 46px;

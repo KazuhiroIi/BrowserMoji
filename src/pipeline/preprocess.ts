@@ -25,6 +25,7 @@ export function sampleFrame(
   video: HTMLVideoElement,
   grid: GridSpec,
   workCanvas: HTMLCanvasElement,
+  mirror = false,
 ): SampledFrame {
   const timings = { pre: 0, read: 0 };
   const vw = video.videoWidth;
@@ -49,7 +50,15 @@ export function sampleFrame(
   const sy = (vh - sh) / 2;
 
   const blitStart = performance.now();
-  ctx.drawImage(video, sx, sy, sw, sh, 0, 0, width, height);
+  if (mirror) {
+    ctx.save();
+    ctx.translate(width, 0);
+    ctx.scale(-1, 1);
+    ctx.drawImage(video, sx, sy, sw, sh, 0, 0, width, height);
+    ctx.restore();
+  } else {
+    ctx.drawImage(video, sx, sy, sw, sh, 0, 0, width, height);
+  }
   timings.pre = performance.now() - blitStart;
 
   const readStart = performance.now();
