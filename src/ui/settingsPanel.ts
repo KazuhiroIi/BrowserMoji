@@ -68,6 +68,11 @@ export function createSettingsPanel(
     cfg.invert = v;
   });
 
+  // エッジのみ描画（フィラーの濃度文字を描画せず空白にする）
+  addCheckbox(panel, t('settingEdgeOnly'), cfg.edgeOnly, (v) => {
+    cfg.edgeOnly = v;
+  });
+
   // fps 表示（P-3）
   addCheckbox(panel, t('settingShowFps'), cfg.showFps, (v) => {
     cfg.showFps = v;

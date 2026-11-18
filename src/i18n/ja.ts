@@ -35,6 +35,7 @@ export const ja: MessageDict = {
   settingEdgeThreshold: 'エッジのしきい値',
   settingEdgePriority: 'エッジの強さ',
   settingInvert: '白黒反転',
+  settingEdgeOnly: 'エッジのみ描画',
   settingShowFps: 'fps 表示',
   // 最初のフレームが完了するまでの間の fps オーバーレイの表示
   fpsMeasuring: '計測中…',

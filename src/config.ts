@@ -43,6 +43,8 @@ export type AppConfig = {
   featurePx: number;
   /** 白黒反転（既定: 白背景＋黒文字、T-6） */
   invert: boolean;
+  /** エッジマスのみ描画（フィラーの濃度文字を描画せず空白にする） */
+  edgeOnly: boolean;
   /** 使用する文字セット（F-13 で切り替え UI を追加する予定） */
   charset: string;
   /** デバッグ用 fps 表示（P-3） */
@@ -68,6 +70,7 @@ export const defaultConfig: AppConfig = {
   // selectorA モードでのみ使う（classic モードは 1px = 1 セル。effectiveFeaturePx）
   featurePx: 16,
   invert: false,
+  edgeOnly: false,
   // classic モードの既定文字セット（076886d 適用前のダミーセット）
   charset: 'default',
   // EXP-1 で実機 fps を計測するため既定 ON。設定パネルで OFF にできる

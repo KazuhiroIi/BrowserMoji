@@ -23,6 +23,7 @@ export class DensityEdgeGlyphSelector implements GlyphSelector {
     const densityInk = densityIds.map((id) => atlas.glyphs[id].ink);
     const lines = atlas.straightLines;
     const ids = new Uint16Array(features.length);
+    const blankId = densityIds[0];
 
     // edgePriority が大きいほど実効しきい値が下がる（= 置き替わりやすい）。
     // 既定 0.5 のとき edgeThreshold そのもの、0 で 1.5 倍、1 で 0.5 倍。
@@ -30,14 +31,15 @@ export class DensityEdgeGlyphSelector implements GlyphSelector {
 
     for (let i = 0; i < features.length; i++) {
       const f = features[i];
-      const v = applyContrast(f.luminance, cfg.contrast);
-      let id = pickDensity(densityIds, densityInk, 1 - v);
-
       // エッジ判定: セル内最大 |勾配|（EXP-2 発見 1）と整合性（D-009）
       if (f.gradMagnitude >= effectiveThreshold && f.gradCoherence >= cfg.coherenceMin) {
-        id = pickLineGlyph(lines, f.gradAngle, f.gradMagnitude);
+        ids[i] = pickLineGlyph(lines, f.gradAngle, f.gradMagnitude);
+      } else if (cfg.edgeOnly) {
+        ids[i] = blankId;
+      } else {
+        const v = applyContrast(f.luminance, cfg.contrast);
+        ids[i] = pickDensity(densityIds, densityInk, 1 - v);
       }
-      ids[i] = id;
     }
     return ids;
   }
@@ -63,6 +65,7 @@ export class ClassicGlyphSelector implements GlyphSelector {
     const atlas = this.atlasProvider.getAtlas(cfg);
     const density = atlas.densityIds;
     const ids = new Uint16Array(features.length);
+    const blankId = density[0];
 
     // edgePriority が大きいほど実効しきい値が下がる（= 置き替わりやすい）。
     // 既定 0.5 のとき edgeThreshold そのもの、0 で 1.5 倍、1 で 0.5 倍。
@@ -70,9 +73,14 @@ export class ClassicGlyphSelector implements GlyphSelector {
 
     for (let i = 0; i < features.length; i++) {
       const f = features[i];
-      const v = applyContrast(f.luminance, cfg.contrast);
-      const idx = Math.min(density.length - 1, Math.max(0, Math.round(v * (density.length - 1))));
-      let id = density[idx];
+      let id: number;
+      if (cfg.edgeOnly) {
+        id = blankId;
+      } else {
+        const v = applyContrast(f.luminance, cfg.contrast);
+        const idx = Math.min(density.length - 1, Math.max(0, Math.round(v * (density.length - 1))));
+        id = density[idx];
+      }
 
       if (f.gradMagnitude >= effectiveThreshold) {
         const lineId = pickLineGlyph4(atlas.lineIds, f.gradAngle);
