@@ -58,6 +58,7 @@ export const messageKeys = [
   'captureRecordStart',
   'captureRecordStop',
   'captureRecordUnsupported',
+  'languageSelect',
 ] as const;
 
 export type MessageKey = (typeof messageKeys)[number];

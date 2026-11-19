@@ -68,15 +68,11 @@ export interface AtlasProvider {
  * 前のダミーセット。履歴（076886d^ の atlas.ts の DUMMY_CHARSETS.default）から復元した
  */
 const LEGACY_DENSITY_CHARS = [
-  '　', // 全角スペース（背景 = T-3）
-  '・', // 中黒
-  '○', // 白丸
-  '＋', // 全角プラス
-  'の', // ひらがな「の」
-  '三', // 漢字「三」
-  '日', // 漢字「日」
-  '◎', // 二重丸
-  '■', // 黒四角
+  '　',
+  '・',
+  '■',
+  '□',
+  '＋',
 ];
 
 const LEGACY_LINE_CHARS = [

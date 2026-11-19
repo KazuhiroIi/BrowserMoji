@@ -65,4 +65,5 @@ export const ja: MessageDict = {
   captureRecordStart: '録画',
   captureRecordStop: '停止',
   captureRecordUnsupported: '非対応',
+  languageSelect: '言語を選択',
 };

@@ -1,5 +1,4 @@
-import type { AppConfig, PipelineMode, RendererKind } from '../config';
-import { applyModeDefaults } from '../config';
+import type { AppConfig, RendererKind } from '../config';
 import { t } from '../i18n';
 import { getDefaultFillerChars } from '../pipeline/atlas';
 import { el } from './dom';
@@ -34,26 +33,12 @@ export function createSettingsPanel(
     cfg.renderer = v as RendererKind;
   });
 
-  // パイプラインの方式（EXP-2 / EXP-3 適用前の classic と、基準実装準拠の selectorA。
-  // 切替 UI で変更し、次フレームから反映する。切替時に列数・しきい値・文字セットを
-  // モードの既定値へ入れ替える）
-  addSelect(panel, t('settingMode'), cfg.mode, [
-    { value: 'classic', label: t('settingModeClassic') },
-    { value: 'selectorA', label: t('settingModeSelectorA') },
-  ], '', (v) => {
-    cfg.mode = v as PipelineMode;
-    applyModeDefaults(cfg);
-    columnsSlider.setValue(cfg.columns);
-    edgeThresholdSlider.setValue(cfg.edgeThreshold);
-    fillerCharsInput.setValue(getDefaultFillerChars(cfg.charset));
-  });
-
-  // 列数（F-5）とエッジのしきい値はモード切替で既定値に入れ替わるため、
-  // 切替後に表示を更新できるよう戻り値を受けておく
-  const columnsSlider = addSlider(panel, t('settingColumns'), cfg.columns, 8, 160, 1, (v) => {
+  // 列数（F-5）
+  addSlider(panel, t('settingColumns'), cfg.columns, 8, 160, 1, (v) => {
     cfg.columns = Math.round(v);
   }, (v) => String(Math.round(v)));
-  const edgeThresholdSlider = addSlider(panel, t('settingEdgeThreshold'), cfg.edgeThreshold, 0, 1, 0.01, (v) => {
+  // エッジのしきい値
+  addSlider(panel, t('settingEdgeThreshold'), cfg.edgeThreshold, 0, 1, 0.01, (v) => {
     cfg.edgeThreshold = v;
   }, (v) => v.toFixed(2));
 
@@ -95,7 +80,7 @@ export function createSettingsPanel(
   cmatrixBgCheckbox.setDisabled(!cfg.edgeOnly);
 
   // フィラー文字（リアルタイム編集用 textarea + 既定に戻すボタン）
-  const fillerCharsInput = addFillerCharsEditor(
+  addFillerCharsEditor(
     panel,
     t('settingFillerChars'),
     t('settingFillerCharsReset'),

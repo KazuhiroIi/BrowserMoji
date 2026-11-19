@@ -1,14 +1,13 @@
-import type { AppConfig } from '../config';
+import type { AppConfig, RendererKind } from '../config';
 import { CameraSource, type CameraErrorCode } from '../camera/camera';
 import { startFrameLoop } from '../camera/frameLoop';
 import { DummyAtlasProvider } from '../pipeline/atlas';
 import { CpuFeatureExtractor } from '../pipeline/featureExtractor';
 import { computeGrid } from '../pipeline/grid';
 import { sampleFrame } from '../pipeline/preprocess';
-import { effectiveFeaturePx, type PipelineMode, type RendererKind } from '../config';
 import { Canvas2DRenderer } from '../pipeline/renderer';
 import { WebGL2Renderer, isWebGL2Available } from '../pipeline/rendererWebGL2';
-import { ClassicGlyphSelector, DensityEdgeGlyphSelector } from '../pipeline/glyphSelector';
+import { ClassicGlyphSelector } from '../pipeline/glyphSelector';
 import type { GlyphSelector } from '../pipeline/types';
 import { type MessageKey, t } from '../i18n';
 import { createFpsIndicator, FpsStats, STALL_RESET_MS, type FpsIndicator, type StageTimings } from './fps';
@@ -43,9 +42,7 @@ export class App {
 
   private readonly atlasProvider = new DummyAtlasProvider();
   private readonly extractor = new CpuFeatureExtractor();
-  private selector: GlyphSelector;
-  /** 現在使っているパイプラインの方式（cfg.mode の選択結果） */
-  private activeSelectorMode: PipelineMode;
+  private readonly selector: GlyphSelector;
   /** 現在使っている描画方式（cfg.renderer の選択・フォールバックの結果） */
   private activeRendererKind: RendererKind = 'canvas2d';
   /** WebGL2 が使えない / context lost になった後の再試行を防ぐフラグ */
@@ -66,21 +63,7 @@ export class App {
     private root: HTMLElement,
     private cfg: AppConfig,
   ) {
-    this.selector = createGlyphSelector(cfg.mode, this.atlasProvider);
-    this.activeSelectorMode = cfg.mode;
-  }
-
-  /**
-   * cfg.mode の選択に合わせて文字選択方式を用意する（切替は次フレームから反映）。
-   * classic は適用前の実装（等分量子化 + 4 方向の線置換）、selectorA は基準実装
-   * （selector.py の SelectorA）と同じ意味の現行実装（D-009）。
-   */
-  private ensureSelector(): GlyphSelector {
-    if (this.cfg.mode !== this.activeSelectorMode) {
-      this.selector = createGlyphSelector(this.cfg.mode, this.atlasProvider);
-      this.activeSelectorMode = this.cfg.mode;
-    }
-    return this.selector;
+    this.selector = new ClassicGlyphSelector(this.atlasProvider);
   }
 
   private readonly cameraSource = new CameraSource();
@@ -274,7 +257,7 @@ export class App {
         canvas.width,
         canvas.height,
         this.cfg.columns,
-        effectiveFeaturePx(this.cfg),
+        1,
       );
       const activeVideo = this.video;
       if (!activeVideo) return;
@@ -282,8 +265,7 @@ export class App {
 
       // 描画方式: cfg.renderer の選択に追従する（切替・フォールバックは次フレームから反映）
       const renderer = this.ensureRenderer();
-      // 文字選択方式: cfg.mode の選択に追従する（切替は次フレームから反映）
-      const selector = this.ensureSelector();
+      const selector = this.selector;
 
       // ステージ別の処理時間を計測する（P-3）。前処理 blit / read は sampleFrame が測る
       let stages: StageTimings | null = null;
@@ -409,13 +391,6 @@ export class App {
     screen.append(errorBox);
     this.root.append(screen);
   }
-}
-
-/** cfg.mode に対応する文字選択方式を生成する（N-3 の差し替え可能な段階） */
-function createGlyphSelector(mode: PipelineMode, atlasProvider: DummyAtlasProvider): GlyphSelector {
-  return mode === 'classic'
-    ? new ClassicGlyphSelector(atlasProvider)
-    : new DensityEdgeGlyphSelector(atlasProvider);
 }
 
 /** CameraError（と予期しないエラー）を F-9 の文言キーへ写像する */
