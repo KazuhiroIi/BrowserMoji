@@ -56,4 +56,11 @@ export const ja: MessageDict = {
   fpsDraw: 'draw',
   fpsCols: 'cols',
   fpsNotAvailable: '—',
+  captureCopy: 'コピー',
+  captureCopied: 'コピー済み',
+  captureCopyFailed: 'コピー失敗',
+  captureScreenshot: '撮影',
+  captureRecordStart: '録画',
+  captureRecordStop: '停止',
+  captureRecordUnsupported: '非対応',
 };

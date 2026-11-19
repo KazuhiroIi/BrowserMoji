@@ -49,6 +49,13 @@ export const messageKeys = [
   'fpsDraw',
   'fpsCols',
   'fpsNotAvailable',
+  'captureCopy',
+  'captureCopied',
+  'captureCopyFailed',
+  'captureScreenshot',
+  'captureRecordStart',
+  'captureRecordStop',
+  'captureRecordUnsupported',
 ] as const;
 
 export type MessageKey = (typeof messageKeys)[number];

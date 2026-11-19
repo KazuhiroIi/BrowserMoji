@@ -11,6 +11,7 @@ import { el } from './dom';
 export type SettingsPanel = {
   toggle(): void;
   syncMirror(mirror: boolean): void;
+  setRendererDisabled(disabled: boolean): void;
 };
 
 export function createSettingsPanel(
@@ -26,7 +27,7 @@ export function createSettingsPanel(
   });
 
   // 描画方式（architecture.md §5、EXP-1。非対応環境では選択肢を無効化する。E-2）
-  addSelect(panel, t('settingRenderer'), cfg.renderer, [
+  const rendererSelect = addSelect(panel, t('settingRenderer'), cfg.renderer, [
     { value: 'canvas2d', label: t('settingRendererCanvas2d') },
     { value: 'webgl2', label: t('settingRendererWebgl2'), disabled: !webgl2Available },
   ], t('settingRendererUnsupported'), (v) => {
@@ -112,6 +113,9 @@ export function createSettingsPanel(
     syncMirror(mirror: boolean): void {
       mirrorCheckbox.setValue(mirror);
     },
+    setRendererDisabled(disabled: boolean): void {
+      rendererSelect.disabled = disabled;
+    },
   };
 }
 
@@ -131,7 +135,7 @@ function addSelect(
   options: SelectOption[],
   disabledNote: string,
   onChange: (value: string) => void,
-): void {
+): HTMLSelectElement {
   const row = el('div', 'settings-row');
   const input = document.createElement('select');
   for (const option of options) {
@@ -150,6 +154,7 @@ function addSelect(
   input.addEventListener('change', () => onChange(input.value));
   row.append(el('label', undefined, label), input);
   parent.append(row);
+  return input;
 }
 
 function addSlider(

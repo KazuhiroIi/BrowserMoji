@@ -13,8 +13,17 @@ import type { GlyphSelector } from '../pipeline/types';
 import { type MessageKey, t } from '../i18n';
 import { createFpsIndicator, FpsStats, STALL_RESET_MS, type FpsIndicator, type StageTimings } from './fps';
 import { setTestHook } from './testHook';
-import { createSettingsPanel } from './settingsPanel';
+import { createSettingsPanel, type SettingsPanel } from './settingsPanel';
 import { createStartScreen, type StartScreen } from './startScreen';
+import { createCaptureBar, type CaptureBar } from './captureBar';
+import {
+  downloadBlob,
+  fixWebmDuration,
+  formatCaptureFilename,
+  glyphsToText,
+  mimeTypeToExtension,
+  selectRecordingMimeType,
+} from './capture';
 import { el } from './dom';
 
 /**
@@ -44,6 +53,14 @@ export class App {
   /** e2e テスト用の累積カウンタ（処理したフレーム数とステージ別処理時間の合計） */
   private framesProcessed = 0;
   private stageTotals: StageTimings = { pre: 0, read: 0, feat: 0, sel: 0, draw: 0 };
+
+  private lastGlyphIds: Uint16Array | null = null;
+  private lastGrid: { cols: number; rows: number } | null = null;
+  private pendingScreenshot = false;
+  private settingsPanel: SettingsPanel | null = null;
+  private captureBar: CaptureBar | null = null;
+  private mediaRecorder: MediaRecorder | null = null;
+  private recordedChunks: Blob[] = [];
 
   constructor(
     private root: HTMLElement,
@@ -76,6 +93,9 @@ export class App {
 
   /** 取得と描画ループを止める（ページ遷移などの終了時に呼べるように公開している） */
   stop(): void {
+    if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
+      this.mediaRecorder.stop();
+    }
     this.stopLoop?.();
     this.stopLoop = null;
     const video = this.video;
@@ -111,6 +131,17 @@ export class App {
     // 設定パネル（F-6）と fps 表示（P-3）。fps 表示は最初のフレーム完了を待たず
     // すぐ見えるようにする（実機では最初のフレームに数秒かかることがある。P-3 / D-011）
     const settingsPanel = createSettingsPanel(this.root, this.cfg, isWebGL2Available());
+    this.settingsPanel = settingsPanel;
+
+    const recordMimeType = selectRecordingMimeType();
+    this.captureBar = createCaptureBar(this.root, {
+      onCopy: () => this.copyCurrentText(),
+      onScreenshot: () => {
+        this.pendingScreenshot = true;
+      },
+      onToggleRecord: () => this.toggleRecording(recordMimeType),
+      recordSupported: recordMimeType !== null,
+    });
 
     const switchBtn = el('button', 'camera-switch-btn', '🔄');
     switchBtn.type = 'button';
@@ -264,6 +295,14 @@ export class App {
         const glyphIds = selector.select(features, this.cfg);
         const renderStart = performance.now();
         renderer.render(glyphIds, grid, this.cfg);
+        this.lastGlyphIds = glyphIds;
+        this.lastGrid = { cols: grid.cols, rows: grid.rows };
+        if (this.pendingScreenshot) {
+          this.pendingScreenshot = false;
+          canvas.toBlob((blob) => {
+            if (blob) downloadBlob(blob, formatCaptureFilename('png'));
+          }, 'image/png');
+        }
         stages.feat = selectStart - extractStart;
         stages.sel = renderStart - selectStart;
         stages.draw = performance.now() - renderStart;
@@ -303,6 +342,58 @@ export class App {
       this.fps?.setVisible(false);
       this.showLoopError(e);
     }
+  }
+
+  private async copyCurrentText(): Promise<boolean> {
+    if (!this.lastGlyphIds || !this.lastGrid) return false;
+    const atlas = this.atlasProvider.getAtlas(this.cfg);
+    const text = glyphsToText(this.lastGlyphIds, this.lastGrid.cols, this.lastGrid.rows, atlas.glyphs);
+    if (!text) return false;
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private toggleRecording(mimeType: string | null): void {
+    if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
+      this.mediaRecorder.stop();
+      return;
+    }
+    const canvas = this.canvas;
+    if (!canvas || mimeType === null || typeof canvas.captureStream !== 'function') return;
+
+    const stream = canvas.captureStream(30);
+    const options = mimeType ? { mimeType } : undefined;
+    const recorder = new MediaRecorder(stream, options);
+    const startTime = performance.now();
+    this.recordedChunks = [];
+    recorder.ondataavailable = (e) => {
+      if (e.data.size > 0) this.recordedChunks.push(e.data);
+    };
+    recorder.onstop = () => {
+      const durationMs = performance.now() - startTime;
+      const actualMime = recorder.mimeType || mimeType || 'video/webm';
+      const rawBlob = new Blob(this.recordedChunks, { type: actualMime });
+      this.recordedChunks = [];
+      this.mediaRecorder = null;
+      this.captureBar?.setRecording(false);
+      this.settingsPanel?.setRendererDisabled(false);
+      stream.getTracks().forEach((track) => track.stop());
+      if (rawBlob.size > 0) {
+        const ext = mimeTypeToExtension(actualMime);
+        void (async () => {
+          const finalBlob = ext === 'webm' ? await fixWebmDuration(rawBlob, durationMs) : rawBlob;
+          downloadBlob(finalBlob, formatCaptureFilename(ext));
+        })();
+      }
+    };
+    this.mediaRecorder = recorder;
+    recorder.start();
+    this.captureBar?.setRecording(true);
+    this.settingsPanel?.setRendererDisabled(true);
   }
 
   /** tick 内で回復できない例外が起きたときの表示（F-9。開始画面のエラー表示と同じ体裁で出す） */
