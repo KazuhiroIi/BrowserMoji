@@ -72,6 +72,11 @@ export function createSettingsPanel(
     cfg.invert = v;
   });
 
+  // 輝度反転
+  addCheckbox(panel, t('settingInvertLuminance'), cfg.invertLuminance, (v) => {
+    cfg.invertLuminance = v;
+  });
+
   // 左右反転（前面カメラ時は既定で true）
   const mirrorCheckbox = addCheckbox(panel, t('settingMirror'), cfg.mirror, (v) => {
     cfg.mirror = v;

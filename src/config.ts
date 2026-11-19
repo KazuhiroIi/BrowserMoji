@@ -43,6 +43,8 @@ export type AppConfig = {
   featurePx: number;
   /** 白黒反転（既定: 白背景＋黒文字、T-6） */
   invert: boolean;
+  /** 輝度反転（元画像の輝度と文字選択時の濃度スコアの関係を反転） */
+  invertLuminance: boolean;
   /** 左右反転（ミラー表示。前面カメラ時は既定で true） */
   mirror: boolean;
   /** エッジマスのみ描画（フィラーの濃度文字を描画せず空白にする） */
@@ -79,6 +81,7 @@ export const defaultConfig: AppConfig = {
   // selectorA モードでのみ使う（classic モードは 1px = 1 セル。effectiveFeaturePx）
   featurePx: 16,
   invert: false,
+  invertLuminance: false,
   mirror: false,
   edgeOnly: false,
   cmatrixBg: false,

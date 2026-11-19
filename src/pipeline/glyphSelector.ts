@@ -38,7 +38,8 @@ export class DensityEdgeGlyphSelector implements GlyphSelector {
         ids[i] = blankId;
       } else {
         const v = applyContrast(f.luminance, cfg.contrast);
-        ids[i] = pickDensity(densityIds, densityInk, 1 - v);
+        const targetDensity = cfg.invertLuminance ? v : 1 - v;
+        ids[i] = pickDensity(densityIds, densityInk, targetDensity);
       }
     }
     return ids;
@@ -78,7 +79,8 @@ export class ClassicGlyphSelector implements GlyphSelector {
         id = blankId;
       } else {
         const v = applyContrast(f.luminance, cfg.contrast);
-        const idx = Math.min(density.length - 1, Math.max(0, Math.round(v * (density.length - 1))));
+        const effectiveV = cfg.invertLuminance ? 1 - v : v;
+        const idx = Math.min(density.length - 1, Math.max(0, Math.round(effectiveV * (density.length - 1))));
         id = density[idx];
       }
 
