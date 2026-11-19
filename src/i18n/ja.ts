@@ -38,6 +38,7 @@ export const ja: MessageDict = {
   settingMirror: '左右反転',
   cameraSwitch: 'カメラ切替',
   settingEdgeOnly: 'エッジのみ描画',
+  settingCmatrixBg: 'cmatrix風背景',
   settingFillerChars: 'フィラー文字',
   settingFillerCharsReset: '既定に戻す',
   settingShowFps: 'fps 表示',

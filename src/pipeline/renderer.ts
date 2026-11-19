@@ -1,5 +1,6 @@
 import type { AppConfig } from '../config';
 import type { AtlasProvider, FgColor, GlyphAtlas } from './atlas';
+import { CMATRIX_CHARS, CmatrixRain } from './cmatrix';
 import type { Renderer, GridSpec } from './types';
 
 /**
@@ -27,6 +28,7 @@ export class Canvas2DRenderer implements Renderer {
   private cacheKey = '';
   private cacheCellW = 0;
   private cacheCellH = 0;
+  private cmatrix = new CmatrixRain();
 
   constructor(
     private canvas: HTMLCanvasElement,
@@ -41,11 +43,20 @@ export class Canvas2DRenderer implements Renderer {
     const cellW = this.cacheCellW;
     const cellH = this.cacheCellH;
 
+    const isCmatrix = cfg.edgeOnly && cfg.cmatrixBg;
+
     // 背景（文字を置かない部分）は全角スペース扱いで、背景色の塗りつぶしで済ませる（T-3）
-    ctx.fillStyle = cfg.invert ? '#000000' : '#ffffff';
+    ctx.fillStyle = isCmatrix || cfg.invert ? '#000000' : '#ffffff';
     ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
     const { cols, rows, cellWidth, cellHeight } = grid;
+    if (isCmatrix) {
+      this.cmatrix.update(cols, rows);
+      ctx.fillStyle = '#00ff41';
+      ctx.font = `${Math.max(8, Math.floor(cellHeight * 0.85))}px monospace`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+    }
 
     // 小数端数による描き残り・すき間を避けるため、セル境界を四捨五入して確定させる
     const xs = new Int32Array(cols + 1);
@@ -57,15 +68,28 @@ export class Canvas2DRenderer implements Renderer {
       const dy = ys[y];
       const dh = ys[y + 1] - dy;
       for (let x = 0; x < cols; x++) {
-        const id = glyphIds[y * cols + x];
+        const idx = y * cols + x;
+        const id = glyphIds[idx];
         const glyph = atlas.glyphs[id];
-        if (!glyph || glyph.ink < 0.01) continue; // ほぼ空白（全角スペース等）は塗らない
         const dx = xs[x];
         const dw = xs[x + 1] - dx;
+        if (!glyph || glyph.ink < 0.01) {
+          if (isCmatrix) {
+            const alpha = this.cmatrix.opacities[idx];
+            if (alpha > 0) {
+              ctx.globalAlpha = alpha / 255;
+              const ch = CMATRIX_CHARS[this.cmatrix.charIds[idx]];
+              ctx.fillText(ch, dx + dw * 0.5, dy + dh * 0.5);
+            }
+          }
+          continue; // ほぼ空白（全角スペース等）は塗らない
+        }
+        ctx.globalAlpha = 1.0;
         // 転写元はセル実サイズのキャッシュ。端数処理の差で ±1px の伸縮が残ることがある
         ctx.drawImage(src, id * cellW, 0, cellW, cellH, dx, dy, dw, dh);
       }
     }
+    ctx.globalAlpha = 1.0;
   }
 
   private ensureContext(): CanvasRenderingContext2D | null {
@@ -80,7 +104,7 @@ export class Canvas2DRenderer implements Renderer {
   private scaledAtlas(atlas: GlyphAtlas, cfg: AppConfig, grid: GridSpec): HTMLCanvasElement {
     const cellW = Math.max(1, Math.round(grid.cellWidth));
     const cellH = Math.max(1, Math.round(grid.cellHeight));
-    const fg: FgColor = cfg.invert ? 'white' : 'black';
+    const fg: FgColor = cfg.edgeOnly && cfg.cmatrixBg ? 'green' : cfg.invert ? 'white' : 'black';
     const key = `${cfg.charset}/${fg}/${cellW}x${cellH}`;
     if (this.cacheCanvas && this.cacheAtlas === atlas && this.cacheKey === key) {
       return this.cacheCanvas;

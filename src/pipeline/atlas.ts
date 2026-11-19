@@ -19,7 +19,7 @@ export type GlyphInfo = {
 };
 
 /** 前景の色ごとに用意したアトラス画像 */
-export type FgColor = 'black' | 'white';
+export type FgColor = 'black' | 'white' | 'green';
 
 /** 方式 A のエッジ置換で使う「まっすぐな線」のグリフ（D-009 / T-5） */
 export type StraightLineGlyph = {
@@ -302,7 +302,7 @@ export function buildDummyAtlas(
       const ctx = canvas.getContext('2d');
       if (ctx) {
         const bgColor = fg === 'black' ? '#ffffff' : '#000000';
-        const color = fg === 'black' ? '#000000' : '#ffffff';
+        const color = fg === 'black' ? '#000000' : fg === 'green' ? '#00ff41' : '#ffffff';
         ctx.fillStyle = bgColor;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         glyphs.forEach((g) => drawGlyphCell(ctx, g.char, g.id * cell, color, cell));

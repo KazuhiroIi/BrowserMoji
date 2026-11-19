@@ -47,6 +47,8 @@ export type AppConfig = {
   mirror: boolean;
   /** エッジマスのみ描画（フィラーの濃度文字を描画せず空白にする） */
   edgeOnly: boolean;
+  /** エッジのみ描画時、背景に cmatrix 風の英数記号アニメーションを描画する */
+  cmatrixBg: boolean;
   /** 使用する文字セット（F-13 で切り替え UI を追加する予定） */
   charset: string;
   /**
@@ -79,6 +81,7 @@ export const defaultConfig: AppConfig = {
   invert: false,
   mirror: false,
   edgeOnly: false,
+  cmatrixBg: false,
   // classic モードの既定文字セット（076886d 適用前のダミーセット）
   charset: 'default',
   fillerChars: null,

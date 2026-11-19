@@ -1,5 +1,6 @@
 import type { AppConfig } from '../config';
 import type { AtlasProvider, FgColor, GlyphAtlas } from './atlas';
+import { CMATRIX_CHARS, CmatrixRain } from './cmatrix';
 import type { Renderer, GridSpec } from './types';
 
 /**
@@ -44,6 +45,12 @@ export class WebGL2Renderer implements Renderer {
   /** 直近に検知した GL エラーコード（診断表示用。0 = エラー無し） */
   private lastGlError = 0;
   private uniform: Record<string, WebGLUniformLocation | null> = {};
+  private cmatrix = new CmatrixRain();
+  private cmatrixAtlasTexture: WebGLTexture | null = null;
+  private cmatrixCharTexture: WebGLTexture | null = null;
+  private cmatrixAlphaTexture: WebGLTexture | null = null;
+  private cmatrixTexWidth = 0;
+  private cmatrixTexHeight = 0;
 
   constructor(
     private canvas: HTMLCanvasElement,
@@ -66,7 +73,7 @@ export class WebGL2Renderer implements Renderer {
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
     gl.enableVertexAttribArray(0);
     gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
-    for (const name of ['uGrid', 'uAtlasCells', 'uAtlasCell', 'uBg']) {
+    for (const name of ['uGrid', 'uAtlasCells', 'uAtlasCell', 'uBg', 'uCmatrixEnabled', 'uCmatrixAtlasLen']) {
       this.uniform[name] = gl.getUniformLocation(this.program, name);
     }
     gl.useProgram(this.program);
@@ -74,6 +81,9 @@ export class WebGL2Renderer implements Renderer {
     // uAtlas が整数テクスチャ（uGlyphs）と衝突して draw が INVALID_OPERATION になる
     gl.uniform1i(gl.getUniformLocation(this.program, 'uGlyphs'), 0);
     gl.uniform1i(gl.getUniformLocation(this.program, 'uAtlas'), 1);
+    gl.uniform1i(gl.getUniformLocation(this.program, 'uCmatrixAtlas'), 2);
+    gl.uniform1i(gl.getUniformLocation(this.program, 'uCmatrixChars'), 3);
+    gl.uniform1i(gl.getUniformLocation(this.program, 'uCmatrixAlpha'), 4);
     // 構築中のエラーフラグを消化しておく（最初の render() の getError を誤検知させない）
     gl.getError();
   }
@@ -90,8 +100,13 @@ export class WebGL2Renderer implements Renderer {
       this.broken = true;
       return;
     }
+    const isCmatrix = cfg.edgeOnly && cfg.cmatrixBg;
     this.ensureAtlasTexture(atlas, cfg);
     this.ensureGlyphTexture(glyphIds, grid.cols, grid.rows);
+    if (isCmatrix) {
+      this.cmatrix.update(grid.cols, grid.rows);
+      this.ensureCmatrixTextures(grid.cols, grid.rows);
+    }
     // 転送の成否をここで確認する。失敗したテクスチャは「不完全」になり、サンプル値が
     // 不透明黒を返すため、描いてしまうと全画面が真っ黒になる（D-011）。黒で塗るよりは
     // 描かずに Canvas 2D へフォールバックするほうが安全
@@ -114,12 +129,14 @@ export class WebGL2Renderer implements Renderer {
     gl.bindTexture(gl.TEXTURE_2D, this.glyphTexture);
     gl.activeTexture(gl.TEXTURE1);
     gl.bindTexture(gl.TEXTURE_2D, this.atlasTexture);
-    // 背景: 白背景＋黒文字、invert で反転（T-6）。文字色はアトラス側に含まれる
-    const bg = cfg.invert ? [0, 0, 0] : [1, 1, 1];
+    // 背景: 白背景＋黒文字、invert で反転（T-6）。cmatrix モード時は黒背景＋緑文字
+    const bg = isCmatrix || cfg.invert ? [0, 0, 0] : [1, 1, 1];
     gl.uniform4f(this.uniform.uGrid, grid.cols, grid.rows, grid.cellWidth, grid.cellHeight);
     gl.uniform2f(this.uniform.uAtlasCells, atlas.glyphs.length, 1);
     gl.uniform2f(this.uniform.uAtlasCell, atlas.cellWidth, atlas.cellHeight);
     gl.uniform3f(this.uniform.uBg, bg[0], bg[1], bg[2]);
+    gl.uniform1i(this.uniform.uCmatrixEnabled, isCmatrix ? 1 : 0);
+    gl.uniform1f(this.uniform.uCmatrixAtlasLen, CMATRIX_CHARS.length);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     const drawError = gl.getError();
     if (drawError !== gl.NO_ERROR) {
@@ -157,12 +174,17 @@ precision highp float;
 precision highp usampler2D;
 uniform usampler2D uGlyphs;
 uniform sampler2D uAtlas;
+uniform sampler2D uCmatrixAtlas;
+uniform usampler2D uCmatrixChars;
+uniform sampler2D uCmatrixAlpha;
 // (cols, rows, cellWidth, cellHeight)
 uniform vec4 uGrid;
 // (グリフ数, 1) と (アトラス 1 セル幅 px, 高さ px)
 uniform vec2 uAtlasCells;
 uniform vec2 uAtlasCell;
 uniform vec3 uBg;
+uniform int uCmatrixEnabled;
+uniform float uCmatrixAtlasLen;
 out vec4 outColor;
 void main() {
   // 画面のセル位置（GL は y 上向きなので行を反転する）
@@ -177,6 +199,17 @@ void main() {
   // セル内の相対位置（0..1）
   float fu = gl_FragCoord.x / uGrid.z - cx;
   float fv = gl_FragCoord.y / uGrid.w - cyBottom;
+  if (uCmatrixEnabled == 1 && id == 0u) {
+    float alpha = texelFetch(uCmatrixAlpha, ivec2(int(cx), int(cy)), 0).r;
+    if (alpha > 0.0) {
+      uint cid = texelFetch(uCmatrixChars, ivec2(int(cx), int(cy)), 0).r;
+      float cu = (float(cid) + clamp(fu, 0.02, 0.98)) / uCmatrixAtlasLen;
+      float cv = clamp(1.0 - fv, 0.02, 0.98);
+      vec4 ctex = texture(uCmatrixAtlas, vec2(cu, cv));
+      outColor = vec4(ctex.rgb * alpha, 1.0);
+      return;
+    }
+  }
   // 半テクセル inset 付き LINEAR で隣接文字のにじみを防ぐ
   float insetX = 0.5 / uAtlasCell.x;
   float insetY = 0.5 / uAtlasCell.y;
@@ -253,9 +286,9 @@ void main() {
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
   }
 
-  /** アトラス canvas をテクスチャとしてアップロードする（charset・invert 変更時に再アップロード） */
+  /** アトラス canvas をテクスチャとしてアップロードする（charset・invert・cmatrix 変更時に再アップロード） */
   private ensureAtlasTexture(atlas: GlyphAtlas, cfg: AppConfig): void {
-    const fg: FgColor = cfg.invert ? 'white' : 'black';
+    const fg: FgColor = cfg.edgeOnly && cfg.cmatrixBg ? 'green' : cfg.invert ? 'white' : 'black';
     const key = `${atlas.charset}/${fg}`;
     if (this.atlasTexture && this.atlasTextureKey === key) return;
 
@@ -272,6 +305,83 @@ void main() {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, atlas.canvasFor(fg));
     this.atlasTextureKey = key;
+  }
+
+  /** cmatrix 用の文字アトラス（初回のみ）とセルごとの文字ID・opacity テクスチャを更新する */
+  private ensureCmatrixTextures(cols: number, rows: number): void {
+    const gl = this.gl;
+
+    if (!this.cmatrixAtlasTexture) {
+      const cellW = 32;
+      const cellH = 48;
+      const canvas = document.createElement('canvas');
+      canvas.width = cellW * CMATRIX_CHARS.length;
+      canvas.height = cellH;
+      const ctx = canvas.getContext('2d')!;
+      ctx.fillStyle = '#000000';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = '#00ff41';
+      ctx.font = `bold ${Math.floor(cellH * 0.8)}px monospace`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      for (let i = 0; i < CMATRIX_CHARS.length; i++) {
+        ctx.fillText(CMATRIX_CHARS[i], i * cellW + cellW * 0.5, cellH * 0.5);
+      }
+
+      this.cmatrixAtlasTexture = gl.createTexture();
+      gl.activeTexture(gl.TEXTURE2);
+      gl.bindTexture(gl.TEXTURE_2D, this.cmatrixAtlasTexture);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
+    }
+
+    const sizeChanged = this.cmatrixTexWidth !== cols || this.cmatrixTexHeight !== rows;
+    if (sizeChanged) {
+      this.cmatrixTexWidth = cols;
+      this.cmatrixTexHeight = rows;
+    }
+
+    if (!this.cmatrixCharTexture) {
+      this.cmatrixCharTexture = gl.createTexture();
+      gl.activeTexture(gl.TEXTURE3);
+      gl.bindTexture(gl.TEXTURE_2D, this.cmatrixCharTexture);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    } else {
+      gl.activeTexture(gl.TEXTURE3);
+      gl.bindTexture(gl.TEXTURE_2D, this.cmatrixCharTexture);
+    }
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 2);
+    if (sizeChanged) {
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.R16UI, cols, rows, 0, gl.RED_INTEGER, gl.UNSIGNED_SHORT, this.cmatrix.charIds);
+    } else {
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, cols, rows, gl.RED_INTEGER, gl.UNSIGNED_SHORT, this.cmatrix.charIds);
+    }
+
+    if (!this.cmatrixAlphaTexture) {
+      this.cmatrixAlphaTexture = gl.createTexture();
+      gl.activeTexture(gl.TEXTURE4);
+      gl.bindTexture(gl.TEXTURE_2D, this.cmatrixAlphaTexture);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    } else {
+      gl.activeTexture(gl.TEXTURE4);
+      gl.bindTexture(gl.TEXTURE_2D, this.cmatrixAlphaTexture);
+    }
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+    if (sizeChanged) {
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, cols, rows, 0, gl.RED, gl.UNSIGNED_BYTE, this.cmatrix.opacities);
+    } else {
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, cols, rows, gl.RED, gl.UNSIGNED_BYTE, this.cmatrix.opacities);
+    }
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
   }
 }
 

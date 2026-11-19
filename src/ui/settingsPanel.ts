@@ -80,7 +80,14 @@ export function createSettingsPanel(
   // エッジのみ描画（フィラーの濃度文字を描画せず空白にする）
   addCheckbox(panel, t('settingEdgeOnly'), cfg.edgeOnly, (v) => {
     cfg.edgeOnly = v;
+    cmatrixBgCheckbox.setDisabled(!v);
   });
+
+  // cmatrix風背景（エッジのみ描画が ON のときだけ有効）
+  const cmatrixBgCheckbox = addCheckbox(panel, t('settingCmatrixBg'), cfg.cmatrixBg, (v) => {
+    cfg.cmatrixBg = v;
+  });
+  cmatrixBgCheckbox.setDisabled(!cfg.edgeOnly);
 
   // フィラー文字（リアルタイム編集用 textarea + 既定に戻すボタン）
   const fillerCharsInput = addFillerCharsEditor(
@@ -200,7 +207,7 @@ function addCheckbox(
   label: string,
   initialValue: boolean,
   onChange: (value: boolean) => void,
-): { setValue(v: boolean): void } {
+): { setValue(v: boolean): void; setDisabled(disabled: boolean): void } {
   const row = el('div', 'settings-row');
   const input = document.createElement('input');
   input.type = 'checkbox';
@@ -211,6 +218,10 @@ function addCheckbox(
   return {
     setValue(v: boolean): void {
       input.checked = v;
+    },
+    setDisabled(disabled: boolean): void {
+      input.disabled = disabled;
+      row.style.opacity = disabled ? '0.5' : '';
     },
   };
 }
